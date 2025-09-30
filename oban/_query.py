@@ -13,7 +13,7 @@ def _load_file(path: str) -> str:
 
 def insert_job(conn, job: Job) -> Job:
     stmt = _load_file("insert_job.sql")
-    
+
     id, ins_at, sch_at = conn.execute(stmt, job.to_dict()).fetchone()
 
     return replace(job, id=id, inserted_at=ins_at, scheduled_at=sch_at)

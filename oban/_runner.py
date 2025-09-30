@@ -1,9 +1,7 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
-from functools import lru_cache
-from typing import Callable, Any, Iterable, Optional
+from typing import Optional
 
 from . import _query
 from .job import Job
@@ -55,7 +53,9 @@ class Runner:
 
                 for job in jobs:
                     fut = self._executor.submit(self._execute_job, job)
-                    fut.add_done_callback(lambda fut, job=job: self._handle_done(job, fut))
+                    fut.add_done_callback(
+                        lambda fut, job=job: self._handle_done(job, fut)
+                    )
 
                 time.sleep(self._poll_interval)
 
