@@ -18,6 +18,7 @@ with psycopg.connect(template_url) as conn:
         CREATE TYPE oban_job_state AS ENUM (
             'available',
             'scheduled',
+            'suspended',
             'executing',
             'retryable',
             'completed',

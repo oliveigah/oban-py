@@ -9,29 +9,31 @@ class JobState(StrEnum):
     """Represents the lifecycle state of a job.
 
     - AVAILABLE: ready to be executed
-    - SCHEDULED: scheduled to run in the future
-    - EXECUTING: currently executing
-    - RETRYABLE: failed but will be retried
+    - CANCELLED: explicitly cancelled
     - COMPLETED: successfully finished
     - DISCARDED: exceeded max attempts
-    - CANCELLED: explicitly cancelled
+    - EXECUTING: currently executing
+    - RETRYABLE: failed but will be retried
+    - SCHEDULED: scheduled to run in the future
+    - SUSPENDED: not available to run currently
     """
 
     AVAILABLE = "available"
-    SCHEDULED = "scheduled"
-    EXECUTING = "executing"
-    RETRYABLE = "retryable"
+    CANCELLED = "cancelled"
     COMPLETED = "completed"
     DISCARDED = "discarded"
-    CANCELLED = "cancelled"
+    EXECUTING = "executing"
+    RETRYABLE = "retryable"
+    SCHEDULED = "scheduled"
+    SUSPENDED = "suspended"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Snooze:
     seconds: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cancel:
     reason: str
 

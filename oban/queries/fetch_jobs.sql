@@ -6,12 +6,16 @@ WITH locked_jobs AS (
   LIMIT %(demand)s
   FOR UPDATE SKIP LOCKED
 )
-UPDATE oban_jobs
+UPDATE
+  oban_jobs
 SET
   attempt = oban_jobs.attempt + 1,
-  attempted_at = timezone('UTC'::text, now()),
+  attempted_at = timezone('UTC', now()),
   attempted_by = %(attempted_by)s,
   state = 'executing'
-FROM locked_jobs
-WHERE oban_jobs.id = locked_jobs.id
-RETURNING oban_jobs.*;
+FROM
+  locked_jobs
+WHERE
+  oban_jobs.id = locked_jobs.id
+RETURNING
+  oban_jobs.*;

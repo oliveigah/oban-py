@@ -69,23 +69,17 @@ class Oban:
         return worker(oban=self, **overrides)
 
     def start(self):
-        if self.pool and not self.pool._pool:
-            self.pool.open()
+        self.pool.open()
 
-        # Faking this for a single queue at first
+        # NOTE: Faking this for a single queue at first
         self._runner = Runner(oban=self, queue="default", limit=10)
         self._runner.start()
 
         return self
 
     def stop(self):
-        # Stop runner first and wait for it to finish
-        if self._runner:
-            self._runner.stop()
-
-        # Now safe to close the pool
-        if self.pool:
-            self.pool.close()
+        self._runner.stop()
+        self.pool.close()
 
     def enqueue(self, job: Job) -> Job:
         with self.get_connection() as conn:
@@ -100,5 +94,8 @@ class Oban:
           with oban.get_connection() as conn:
               # use conn
         """
+
+        # TODO: Can we use a connection if we're already in a transaction? Would that be an extra
+        # argument to `enqueue`?
 
         return self.pool.connection()

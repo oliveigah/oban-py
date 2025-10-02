@@ -1,28 +1,19 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
 from . import _query
-from .job import Job
 from ._worker import resolve_worker
+from .types import Cancel, Snooze
 
 
 class Runner:
-    """
-    Shared thread pool that continuously polls for new jobs and executes them.
-    - One polling thread fetches jobs and submits them to the pool.
-    - A ThreadPoolExecutor runs jobs concurrently.
-    - Graceful stop via .stop() (no new work; waits for in-flight to finish).
-    """
-
     def __init__(
         self,
         *,
         oban,
         queue: str = "default",
         limit: int = 10,
-        max_workers: Optional[int] = None,
         poll_interval: float = 0.1,
     ) -> None:
         self._oban = oban
@@ -31,7 +22,7 @@ class Runner:
         self._poll_interval = poll_interval
 
         self._executor = ThreadPoolExecutor(
-            max_workers=max_workers, thread_name_prefix="oban-job"
+            max_workers=limit, thread_name_prefix="oban-job"
         )
         self._stop_event = threading.Event()
         self._poller = threading.Thread(
@@ -48,33 +39,47 @@ class Runner:
 
     def _poll_loop(self) -> None:
         while not self._stop_event.is_set():
-            with self._oban.get_connection() as conn:
-                jobs = _query.fetch_jobs(conn, queue=self._queue, demand=self._limit)
-
-                for job in jobs:
-                    fut = self._executor.submit(self._execute_job, job)
-                    fut.add_done_callback(
-                        lambda fut, job=job: self._handle_done(job, fut)
+            try:
+                with self._oban.get_connection() as conn:
+                    # TODO: Pass the current instance/uuid information through
+                    jobs = _query.fetch_jobs(
+                        conn, queue=self._queue, demand=self._limit
                     )
 
-                time.sleep(self._poll_interval)
+                    # TODO: track the id of running jobs, used to maintain a limit later
+                    for job in jobs:
+                        future = self._executor.submit(self._execute, self._oban, job)
+                        future.add_done_callback(self._handle_execution_exception)
 
-    def _execute_job(self, job: Job) -> None:
-        print(f"Executing job {job.id} ({job.worker}) with args={job.args}")
+            except Exception:
+                if self._stop_event.is_set():
+                    break
 
-        worker_cls = resolve_worker(job.worker)
-        worker = worker_cls()
+            time.sleep(self._poll_interval)
 
-        print(worker)
+    # TODO: Log something useful when this is instrumented
+    def _handle_execution_exception(self, future):
+        error = future.exception()
 
-        worker.perform(job)
+        if error:
+            print(f"[error] Unhandled exception in job execution: {error!r}")
 
-    def _handle_done(self, job: Job, fut) -> None:
-        exc = fut.exception()
+    def _execute(self, oban, job):
+        worker = resolve_worker(job.worker)()
 
-        # TODO: This should handle the result
+        try:
+            result = worker.perform(job)
+        except Exception as error:
+            result = error
 
-        if exc:
-            print(f"[done] job {job.id} failed: {exc!r}")
-        else:
-            print(f"[done] job {job.id} completed")
+        with oban.get_connection() as conn:
+            match result:
+                case Exception() as error:
+                    # TODO: Calculate backoff
+                    _query.error_job(conn, job, error, 1)
+                case Snooze(seconds=seconds):
+                    _query.snooze_job(conn, job, seconds)
+                case Cancel(reason=reason):
+                    _query.cancel_job(conn, job, reason)
+                case _:
+                    _query.complete_job(conn, job)

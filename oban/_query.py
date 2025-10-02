@@ -11,12 +11,36 @@ def _load_file(path: str) -> str:
     return files("oban.queries").joinpath(path).read_text(encoding="utf-8")
 
 
-def insert_job(conn, job: Job) -> Job:
-    stmt = _load_file("insert_job.sql")
+def cancel_job(conn, job: Job, reason: str) -> None:
+    stmt = _load_file("cancel_job.sql")
+    args = {"attempt": job.attempt, "id": job.id, "reason": reason}
 
-    id, ins_at, sch_at = conn.execute(stmt, job.to_dict()).fetchone()
+    conn.execute(stmt, args)
 
-    return replace(job, id=id, inserted_at=ins_at, scheduled_at=sch_at)
+
+def complete_job(conn, job: Job) -> None:
+    stmt = _load_file("complete_job.sql")
+
+    conn.execute(stmt, {"id": job.id})
+
+
+def error_job(conn, job: Job, error: Exception, seconds: int) -> None:
+    stmt = _load_file("error_job.sql")
+    args = {
+        "attempt": job.attempt,
+        "id": job.id,
+        "error": repr(error),
+        "seconds": seconds,
+    }
+
+    conn.execute(stmt, args)
+
+
+def snooze_job(conn, job: Job, seconds: int) -> None:
+    stmt = _load_file("snooze_job.sql")
+    args = {"id": job.id, "seconds": seconds}
+
+    conn.execute(stmt, args)
 
 
 def fetch_jobs(conn, demand: int, queue: str) -> list[Job]:
@@ -28,3 +52,11 @@ def fetch_jobs(conn, demand: int, queue: str) -> list[Job]:
         cur.execute(stmt, args)
 
         return cur.fetchall()
+
+
+def insert_job(conn, job: Job) -> Job:
+    stmt = _load_file("insert_job.sql")
+
+    id, ins_at, sch_at = conn.execute(stmt, job.to_dict()).fetchone()
+
+    return replace(job, id=id, inserted_at=ins_at, scheduled_at=sch_at)
