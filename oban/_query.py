@@ -50,10 +50,9 @@ def get_job(conn, job_id: int) -> Job:
         return cur.fetchone()
 
 
-def fetch_jobs(conn, demand: int, queue: str) -> list[Job]:
+def fetch_jobs(conn, demand: int, queue: str, node: str, uuid: str) -> list[Job]:
     stmt = _load_file("fetch_jobs.sql")
-    atby = ["not-a-real-node", "not-a-real-uuid"]
-    args = {"queue": queue, "demand": demand, "attempted_by": atby}
+    args = {"queue": queue, "demand": demand, "attempted_by": [node, uuid]}
 
     with conn.cursor(row_factory=class_row(Job)) as cur:
         cur.execute(stmt, args)

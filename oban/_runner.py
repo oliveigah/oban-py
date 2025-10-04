@@ -21,10 +21,12 @@ class Runner:
         oban: Oban,
         queue: str = "default",
         limit: int = 10,
+        uuid: str,
     ) -> None:
         self._oban = oban
         self._queue = queue
         self._limit = limit
+        self._uuid = uuid
 
         self._executor = ThreadPoolExecutor(
             max_workers=limit, thread_name_prefix=f"oban-{queue}"
@@ -50,28 +52,37 @@ class Runner:
 
     def _poll_loop(self) -> None:
         while not self._stop_event.is_set():
-            # Wait for notification from stager
-            self._work_available.wait(timeout=5.0)
+            # TODO: Shorten this timeout based on configuration, the timeout changes whether we
+            # cleanly break on a stop event
+            if not self._work_available.wait(timeout=1.0):
+                continue
+
             self._work_available.clear()
 
             if self._stop_event.is_set():
                 break
 
             try:
-                with self._oban.get_connection() as conn:
-                    # TODO: Pass the current instance/uuid information through
-                    jobs = _query.fetch_jobs(
-                        conn, queue=self._queue, demand=self._limit
-                    )
+                # TODO: track the id of running jobs, used to maintain a limit later
+                jobs = self._fetch_jobs()
 
-                    # TODO: track the id of running jobs, used to maintain a limit later
-                    for job in jobs:
-                        future = self._executor.submit(self._execute, self._oban, job)
-                        future.add_done_callback(self._handle_execution_exception)
+                for job in jobs:
+                    future = self._executor.submit(self._execute, self._oban, job)
+                    future.add_done_callback(self._handle_execution_exception)
 
             except Exception:
                 if self._stop_event.is_set():
                     break
+
+    def _fetch_jobs(self):
+        with self._oban.get_connection() as conn:
+            return _query.fetch_jobs(
+                conn,
+                queue=self._queue,
+                demand=self._limit,
+                node=self._oban._node,
+                uuid=self._uuid,
+            )
 
     # TODO: Log something useful when this is instrumented
     def _handle_execution_exception(self, future: Future[None]) -> None:

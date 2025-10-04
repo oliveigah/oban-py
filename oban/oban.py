@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import socket
+
 from typing import Any, Callable, Type
+from uuid import uuid4
 from psycopg_pool import ConnectionPool
 
 from . import _query
@@ -14,7 +17,8 @@ class Oban:
     def __init__(
         self,
         *,
-        pool: dict[str, Any] | ConnectionPool,
+        node: str | None = None,
+        pool: dict[str, Any] | ConnectionPool = None,
         queues: dict[str, int] | None = None,
         stage_interval: float = 1.0,
     ) -> None:
@@ -24,6 +28,7 @@ class Oban:
             pool: Database connection pool or configuration dict with 'url' key
             queues: Queue names mapped to worker limits (default: {})
             stage_interval: How often to stage scheduled jobs in seconds (default: 1.0)
+            node: Node identifier for this instance (default: socket.gethostname())
         """
         queues = queues or {}
 
@@ -44,8 +49,10 @@ class Oban:
         else:
             self._pool = pool
 
+        self._node = node or socket.gethostname()
+
         self._runners = {
-            queue: Runner(oban=self, queue=queue, limit=limit)
+            queue: Runner(oban=self, queue=queue, limit=limit, uuid=str(uuid4()))
             for queue, limit in queues.items()
         }
 
