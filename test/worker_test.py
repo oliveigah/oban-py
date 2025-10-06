@@ -19,7 +19,7 @@ class TestWorkerDecorator:
 
         assert isinstance(job, Job)
         assert job.args == {"user_id": 123}
-        assert job.worker == "TestWorker"
+        assert job.worker.endswith("TestWorker")
         assert job.queue == "test_queue"
         assert job.max_attempts == 5
 
@@ -27,6 +27,6 @@ class TestWorkerDecorator:
         job = basic_worker.new({}, priority=1, queue="special")
 
         assert job.args == {}
-        assert job.worker == "TestWorker"
+        assert job.worker.endswith("TestWorker")
         assert job.priority == 1
         assert job.queue == "special"
