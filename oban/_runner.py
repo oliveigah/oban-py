@@ -34,7 +34,7 @@ class Runner:
         self._stop_event = threading.Event()
         self._work_available = threading.Event()
         self._poller = threading.Thread(
-            target=self._poll_loop, name=f"oban-runner-{queue}", daemon=True
+            target=self._loop, name=f"oban-runner-{queue}", daemon=True
         )
 
     def start(self) -> None:
@@ -50,7 +50,7 @@ class Runner:
         """Called by stager when work is available for this queue."""
         self._work_available.set()
 
-    def _poll_loop(self) -> None:
+    def _loop(self) -> None:
         while not self._stop_event.is_set():
             # TODO: Shorten this timeout based on configuration, the timeout changes whether we
             # cleanly break on a stop event

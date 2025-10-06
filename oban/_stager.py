@@ -57,8 +57,6 @@ class Stager:
 
     def _stage(self) -> None:
         with self._oban.get_connection() as conn:
-            _query.stage_jobs(conn, self._stage_limit)
-
             available = _query.check_available_queues(conn)
 
         for queue in available:

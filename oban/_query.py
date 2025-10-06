@@ -73,10 +73,3 @@ def snooze_job(conn, job: Job, seconds: int) -> None:
     args = {"id": job.id, "seconds": seconds}
 
     conn.execute(stmt, args)
-
-
-def stage_jobs(conn, limit: int) -> None:
-    stmt = _load_file("stage_jobs.sql")
-    args = {"limit": limit}
-
-    conn.execute(stmt, args)

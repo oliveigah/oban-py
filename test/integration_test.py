@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from oban import Oban, Cancel, Snooze, worker, _query
 
+
 @worker()
 class Worker:
     performed = set()
@@ -20,6 +21,7 @@ class Worker:
                 return Snooze(1)
             case _:
                 return None
+
 
 def with_backoff(check_fn, timeout=1.0, interval=0.01):
     """Retry a check function with exponential backoff until it passes or times out."""
@@ -47,7 +49,11 @@ class TestObanIntegration:
         Worker.performed.clear()
 
     def oban_instance(self, **overrides):
-        params = {"pool": {"url": self.db_url}, "queues": {"default": 2}, "stage_interval": 0.1}
+        params = {
+            "pool": {"url": self.db_url},
+            "queues": {"default": 2},
+            "stage_interval": 0.1,
+        }
 
         return Oban(**{**params, **overrides})
 
@@ -83,6 +89,21 @@ class TestObanIntegration:
             with_backoff(lambda: self.assert_job_state(oban, job_4.id, "scheduled"))
             with_backoff(lambda: self.assert_job_state(oban, job_5.id, "discarded"))
 
+    def test_executing_scheduled_jobs(self):
+        with self.oban_instance() as oban:
+            utc_now = datetime.now(timezone.utc)
+
+            past_time = utc_now - timedelta(seconds=30)
+            next_time = utc_now + timedelta(seconds=30)
+
+            job_1 = Worker.enqueue({"ref": 1}, scheduled_at=past_time)
+            job_2 = Worker.enqueue({"ref": 2}, scheduled_at=next_time)
+
+            with_backoff(lambda: self.assert_performed(1))
+            with_backoff(lambda: self.assert_job_state(oban, job_1.id, "completed"))
+
+            self.assert_job_state(oban, job_2.id, "scheduled")
+
     def test_errored_jobs_are_retryable_with_backoff(self):
         with self.oban_instance() as oban:
             job = Worker.enqueue({"act": "er", "ref": 1})
@@ -98,18 +119,3 @@ class TestObanIntegration:
             assert job.errors[0]["at"] is not None
             assert job.errors[0]["attempt"] == 1
             assert job.errors[0]["error"] is not None
-
-    def test_staging_scheduled_jobs(self):
-        with self.oban_instance() as oban:
-            utc_now = datetime.now(timezone.utc)
-
-            past_time = utc_now - timedelta(seconds=30)
-            next_time = utc_now + timedelta(seconds=30)
-
-            job_1 = Worker.enqueue({"ref": 1}, scheduled_at=past_time)
-            job_2 = Worker.enqueue({"ref": 2}, scheduled_at=next_time)
-
-            with_backoff(lambda: self.assert_performed(1))
-            with_backoff(lambda: self.assert_job_state(oban, job_1.id, "completed"))
-
-            self.assert_job_state(oban, job_2.id, "scheduled")
