@@ -44,6 +44,24 @@ class Job:
             if value is not None and value.tzinfo is None:
                 setattr(self, key, value.replace(tzinfo=timezone.utc))
 
+        self._validate()
+
+    def _validate(self):
+        if not self.worker:
+            raise ValueError("worker is required")
+
+        if not (1 <= len(self.queue) <= 128):
+            raise ValueError("queue must be between 1 and 128 characters")
+
+        if not (1 <= len(self.worker) <= 128):
+            raise ValueError("worker must be between 1 and 128 characters")
+
+        if self.max_attempts <= 0:
+            raise ValueError("max_attempts must be greater than 0")
+
+        if not (0 <= self.priority <= 9):
+            raise ValueError("priority must be between 0 and 9")
+
     def to_dict(self) -> dict:
         data = asdict(self)
 
