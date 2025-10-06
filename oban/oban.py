@@ -94,8 +94,53 @@ class Oban:
         self._pool.close()
 
     def enqueue(self, job: Job) -> Job:
+        """Insert a job into the database for processing.
+
+        Args:
+            job: A Job instance created via Worker.new()
+
+        Returns:
+            The inserted job with database-assigned values (id, timestamps, state)
+
+        Example:
+            >>> from myapp.oban import oban, EmailWorker
+            >>>
+            >>> job = EmailWorker.new({"to": "user@example.com", "subject": "Welcome"})
+            >>> oban.enqueue(job)
+
+        Note:
+            For convenience, you can also use Worker.enqueue() directly:
+
+            >>> EmailWorker.enqueue({"to": "user@example.com", "subject": "Welcome"})
+        """
         with self.get_connection() as conn:
-            return _query.insert_job(conn, job)
+            return _query.insert_jobs(conn, [job])[0]
+
+    def enqueue_many(self, jobs: list[Job]) -> list[Job]:
+        """Insert multiple jobs into the database in a single operation.
+
+        This is more efficient than calling enqueue() multiple times as it uses a
+        single database query to insert all jobs.
+
+        Args:
+            jobs: A list of Job instances created via Worker.new()
+
+        Returns:
+            The inserted jobs with database-assigned values (id, timestamps, state)
+
+        Example:
+            >>> from myapp.oban import oban, EmailWorker
+            >>>
+            >>> jobs = [
+            ...     EmailWorker.new({"to": "user1@example.com"}),
+            ...     EmailWorker.new({"to": "user2@example.com"}),
+            ...     EmailWorker.new({"to": "user3@example.com"}),
+            ... ]
+            >>>
+            >>> oban.enqueue_many(jobs)
+        """
+        with self.get_connection() as conn:
+            return _query.insert_jobs(conn, jobs)
 
     def get_connection(self) -> Any:
         """Get a connection from the pool.

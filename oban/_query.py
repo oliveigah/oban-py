@@ -1,9 +1,24 @@
+from collections import defaultdict
 from dataclasses import replace
 from functools import lru_cache
 from importlib.resources import files
 from psycopg.rows import class_row
 
 from .job import Job
+
+
+INSERTABLE_FIELDS = [
+    "args",
+    "inserted_at",
+    "max_attempts",
+    "meta",
+    "priority",
+    "queue",
+    "scheduled_at",
+    "state",
+    "tags",
+    "worker",
+]
 
 
 @lru_cache(maxsize=None)
@@ -60,12 +75,22 @@ def fetch_jobs(conn, demand: int, queue: str, node: str, uuid: str) -> list[Job]
         return cur.fetchall()
 
 
-def insert_job(conn, job: Job) -> Job:
-    stmt = _load_file("insert_job.sql")
+def insert_jobs(conn, jobs: list[Job]) -> list[Job]:
+    stmt = _load_file("insert_many.sql")
+    args = defaultdict(list)
 
-    id, ins_at, sch_at = conn.execute(stmt, job.to_dict()).fetchone()
+    for job in jobs:
+        data = job.to_dict()
 
-    return replace(job, id=id, inserted_at=ins_at, scheduled_at=sch_at)
+        for key in INSERTABLE_FIELDS:
+            args[key].append(data[key])
+
+    rows = conn.execute(stmt, dict(args)).fetchall()
+
+    return [
+        replace(job, id=row[0], inserted_at=row[1], scheduled_at=row[2], state=row[3])
+        for job, row in zip(jobs, rows)
+    ]
 
 
 def snooze_job(conn, job: Job, seconds: int) -> None:

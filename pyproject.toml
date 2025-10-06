@@ -12,3 +12,8 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8.3.5", "ruff>=0.9.9"]
+
+[tool.pytest.ini_options]
+markers = [
+    "oban: configure Oban instance options for a test",
+]

@@ -3,6 +3,8 @@ import uuid
 import pytest
 import psycopg
 
+from oban import Oban
+
 DB_URL_BASE = os.getenv("PG_URL_BASE", "postgresql://postgres@localhost")
 TEMPLATE_DB = os.getenv("OBAN_TEMPLATE_DB", "oban_test_template")
 
@@ -20,3 +22,19 @@ def db_url():
     finally:
         with psycopg.connect(f"{DB_URL_BASE}/postgres", autocommit=True) as conn:
             conn.execute(f'DROP DATABASE "{dbname}" WITH (FORCE)')
+
+
+@pytest.fixture
+def oban_instance(request, db_url):
+    """Returns a factory function to create Oban instances with custom config.
+
+    Can be configured via @pytest.mark.oban decorator on individual tests.
+    """
+    mark = request.node.get_closest_marker("oban")
+    mark_kwargs = mark.kwargs if mark else {}
+
+    def _create_instance(**overrides):
+        params = {"pool": {"url": db_url}}
+        return Oban(**{**params, **mark_kwargs, **overrides})
+
+    return _create_instance

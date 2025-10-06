@@ -44,9 +44,6 @@ class Job:
             if value is not None and value.tzinfo is None:
                 setattr(self, key, value.replace(tzinfo=timezone.utc))
 
-        if self.state == "available" and self.scheduled_at is not None:
-            self.state = "scheduled"
-
     def to_dict(self) -> dict:
         data = asdict(self)
 

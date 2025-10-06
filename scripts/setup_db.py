@@ -4,6 +4,10 @@ import psycopg
 ADMIN_URL = os.getenv("PG_ADMIN_URL", "postgresql://postgres@localhost/postgres")
 TEMPLATE_DB = os.getenv("OBAN_TEMPLATE_DB", "oban_test_template")
 
+# Run migrations directly for now. We'll move them into a dedicated module later, but this allows
+# us to run without sqlalchemy/alembic for now.
+TEMPLATE_URL = ADMIN_URL.rsplit("/", 1)[0] + f"/{TEMPLATE_DB}"
+
 with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
     result = conn.execute(
         "SELECT 1 FROM pg_database WHERE datname = %s", (TEMPLATE_DB,)
@@ -15,11 +19,7 @@ with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
     conn.execute(f'DROP DATABASE IF EXISTS "{TEMPLATE_DB}" WITH (FORCE)')
     conn.execute(f'CREATE DATABASE "{TEMPLATE_DB}"')
 
-# Run migrations directly for now. We'll move them into a dedicated module later, but this allows
-# us to run without sqlalchemy/alembic for now.
-template_url = ADMIN_URL.rsplit("/", 1)[0] + f"/{TEMPLATE_DB}"
-
-with psycopg.connect(template_url) as conn:
+with psycopg.connect(TEMPLATE_URL) as conn:
     conn.execute("""
         CREATE TYPE oban_job_state AS ENUM (
             'available',

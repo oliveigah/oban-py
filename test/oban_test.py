@@ -40,22 +40,44 @@ def with_backoff(check_fn, timeout=1.0, interval=0.01):
         raise last_error
 
 
-class TestObanIntegration:
-    @pytest.fixture(autouse=True)
-    def setup(self, db_url):
-        self.db_url = db_url
+class TestEnqueue:
+    def test_jobs_created_with_new_are_inserted_into_database(self, oban_instance):
+        with oban_instance() as oban:
+            job = Worker.new({"ref": 1})
 
+            assert job.id is None
+
+            job = oban.enqueue(job)
+
+            assert job.id is not None
+            assert job.args == {"ref": 1}
+            assert job.worker == "test.oban_test.Worker"
+            assert job.state == "available"
+
+
+class TestEnqueueMany:
+    def test_multiple_jobs_are_inserted_into_database(self, oban_instance):
+        with oban_instance() as oban:
+            jobs = [
+                Worker.new({"ref": 1}),
+                Worker.new({"ref": 2}),
+                Worker.new({"ref": 3}),
+            ]
+
+            jobs = oban.enqueue_many(jobs)
+
+            assert len(jobs) == 3
+
+            for job in jobs:
+                assert job.id is not None
+                assert job.inserted_at is not None
+                assert job.scheduled_at is not None
+                assert job.state == "available"
+
+
+class TestIntegration:
     def teardown_method(self):
         Worker.performed.clear()
-
-    def oban_instance(self, **overrides):
-        params = {
-            "pool": {"url": self.db_url},
-            "queues": {"default": 2},
-            "stage_interval": 0.1,
-        }
-
-        return Oban(**{**params, **overrides})
 
     def assert_performed(self, ref):
         assert ref in Worker.performed
@@ -69,8 +91,9 @@ class TestObanIntegration:
 
         assert job is not None and job.state == expected_state
 
-    def test_inserting_and_executing_jobs(self):
-        with self.oban_instance() as oban:
+    @pytest.mark.oban(queues={"default": 2}, stage_interval=0.1)
+    def test_inserting_and_executing_jobs(self, oban_instance):
+        with oban_instance() as oban:
             job_1 = Worker.enqueue({"act": "ok", "ref": 1})
             job_2 = Worker.enqueue({"act": "er", "ref": 2})
             job_3 = Worker.enqueue({"act": "ca", "ref": 3})
@@ -89,8 +112,9 @@ class TestObanIntegration:
             with_backoff(lambda: self.assert_job_state(oban, job_4.id, "scheduled"))
             with_backoff(lambda: self.assert_job_state(oban, job_5.id, "discarded"))
 
-    def test_executing_scheduled_jobs(self):
-        with self.oban_instance() as oban:
+    @pytest.mark.oban(queues={"default": 2}, stage_interval=0.1)
+    def test_executing_scheduled_jobs(self, oban_instance):
+        with oban_instance() as oban:
             utc_now = datetime.now(timezone.utc)
 
             past_time = utc_now - timedelta(seconds=30)
@@ -104,8 +128,9 @@ class TestObanIntegration:
 
             self.assert_job_state(oban, job_2.id, "scheduled")
 
-    def test_errored_jobs_are_retryable_with_backoff(self):
-        with self.oban_instance() as oban:
+    @pytest.mark.oban(queues={"default": 2}, stage_interval=0.1)
+    def test_errored_jobs_are_retryable_with_backoff(self, oban_instance):
+        with oban_instance() as oban:
             job = Worker.enqueue({"act": "er", "ref": 1})
             now = datetime.now(timezone.utc)
 
@@ -114,6 +139,22 @@ class TestObanIntegration:
             job = self.get_job(oban, job.id)
 
             assert job.scheduled_at > now
+
+            assert len(job.errors) > 0
+            assert job.errors[0]["at"] is not None
+            assert job.errors[0]["attempt"] == 1
+            assert job.errors[0]["error"] is not None
+
+    @pytest.mark.oban(queues={"default": 2}, stage_interval=0.1)
+    def test_errored_jobs_without_attempts_are_discarded(self, oban_instance):
+        with oban_instance() as oban:
+            job = Worker.enqueue({"act": "er", "ref": 1}, max_attempts=1)
+
+            with_backoff(lambda: self.assert_job_state(oban, job.id, "discarded"))
+
+            job = self.get_job(oban, job.id)
+
+            assert job.discarded_at is not None
 
             assert len(job.errors) > 0
             assert job.errors[0]["at"] is not None
