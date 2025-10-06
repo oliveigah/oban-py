@@ -5,7 +5,13 @@ ADMIN_URL = os.getenv("PG_ADMIN_URL", "postgresql://postgres@localhost/postgres"
 TEMPLATE_DB = os.getenv("OBAN_TEMPLATE_DB", "oban_test_template")
 
 with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
-    conn.execute(f'ALTER DATABASE "{TEMPLATE_DB}" IS_TEMPLATE false')
+    result = conn.execute(
+        "SELECT 1 FROM pg_database WHERE datname = %s", (TEMPLATE_DB,)
+    ).fetchone()
+
+    if result:
+        conn.execute(f'ALTER DATABASE "{TEMPLATE_DB}" IS_TEMPLATE false')
+
     conn.execute(f'DROP DATABASE IF EXISTS "{TEMPLATE_DB}" WITH (FORCE)')
     conn.execute(f'CREATE DATABASE "{TEMPLATE_DB}"')
 
