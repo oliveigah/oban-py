@@ -27,7 +27,7 @@ class Stager:
         oban: Oban,
         runners: dict[str, Runner],
         stage_interval: float = 1.0,
-        stage_limit: int = 10_000,
+        stage_limit: int = 20_000,
     ) -> None:
         self._oban = oban
         self._runners = runners
@@ -57,6 +57,8 @@ class Stager:
 
     def _stage(self) -> None:
         with self._oban.get_connection() as conn:
+            _query.stage_jobs(conn, self._stage_limit)
+
             available = _query.check_available_queues(conn)
 
         for queue in available:

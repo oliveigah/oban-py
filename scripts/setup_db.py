@@ -69,6 +69,12 @@ with psycopg.connect(TEMPLATE_URL) as conn:
     """)
 
     conn.execute("""
+        CREATE INDEX oban_jobs_staging_index
+        ON oban_jobs (scheduled_at, id)
+        WHERE state IN ('scheduled', 'retryable')
+    """)
+
+    conn.execute("""
         CREATE TABLE oban_peers (
             name TEXT PRIMARY KEY,
             node TEXT NOT NULL,
