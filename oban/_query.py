@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import replace
-from functools import lru_cache
+from functools import cache
 from importlib.resources import files
 from psycopg.rows import class_row
 
@@ -21,20 +21,20 @@ INSERTABLE_FIELDS = [
 ]
 
 
-@lru_cache(maxsize=None)
-def _load_file(path: str) -> str:
+@cache
+def load_file(path: str) -> str:
     return files("oban.queries").joinpath(path).read_text(encoding="utf-8")
 
 
 async def cancel_job(conn, job: Job, reason: str) -> None:
-    stmt = _load_file("cancel_job.sql")
+    stmt = load_file("cancel_job.sql")
     args = {"attempt": job.attempt, "id": job.id, "reason": reason}
 
     await conn.execute(stmt, args)
 
 
 async def check_available_queues(conn) -> list[str]:
-    stmt = _load_file("check_available_queues.sql")
+    stmt = load_file("check_available_queues.sql")
     rows = await conn.execute(stmt, {})
     results = await rows.fetchall()
 
@@ -42,13 +42,13 @@ async def check_available_queues(conn) -> list[str]:
 
 
 async def complete_job(conn, job: Job) -> None:
-    stmt = _load_file("complete_job.sql")
+    stmt = load_file("complete_job.sql")
 
     await conn.execute(stmt, {"id": job.id})
 
 
 async def error_job(conn, job: Job, error: Exception, seconds: int) -> None:
-    stmt = _load_file("error_job.sql")
+    stmt = load_file("error_job.sql")
     args = {
         "attempt": job.attempt,
         "id": job.id,
@@ -67,7 +67,7 @@ async def get_job(conn, job_id: int) -> Job:
 
 
 async def fetch_jobs(conn, demand: int, queue: str, node: str, uuid: str) -> list[Job]:
-    stmt = _load_file("fetch_jobs.sql")
+    stmt = load_file("fetch_jobs.sql")
     args = {"queue": queue, "demand": demand, "attempted_by": [node, uuid]}
 
     async with conn.cursor(row_factory=class_row(Job)) as cur:
@@ -77,7 +77,7 @@ async def fetch_jobs(conn, demand: int, queue: str, node: str, uuid: str) -> lis
 
 
 async def insert_jobs(conn, jobs: list[Job]) -> list[Job]:
-    stmt = _load_file("insert_many.sql")
+    stmt = load_file("insert_many.sql")
     args = defaultdict(list)
 
     for job in jobs:
@@ -96,20 +96,26 @@ async def insert_jobs(conn, jobs: list[Job]) -> list[Job]:
 
 
 async def install(conn) -> None:
-    stmt = _load_file("install.sql")
+    stmt = load_file("install.sql")
 
     await conn.execute(stmt)
 
 
 async def snooze_job(conn, job: Job, seconds: int) -> None:
-    stmt = _load_file("snooze_job.sql")
+    stmt = load_file("snooze_job.sql")
     args = {"id": job.id, "seconds": seconds}
 
     await conn.execute(stmt, args)
 
 
 async def stage_jobs(conn, limit: int) -> None:
-    stmt = _load_file("stage_jobs.sql")
+    stmt = load_file("stage_jobs.sql")
     args = {"limit": limit}
 
     await conn.execute(stmt, args)
+
+
+async def uninstall(conn) -> None:
+    stmt = load_file("uninstall.sql")
+
+    await conn.execute(stmt)

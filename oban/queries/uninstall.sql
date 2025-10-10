@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS oban_peers CASCADE;
+DROP TABLE IF EXISTS oban_jobs CASCADE;
+DROP TYPE IF EXISTS oban_job_state;

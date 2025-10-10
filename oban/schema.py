@@ -1,23 +1,109 @@
 """Database schema installation for Oban."""
 
+from typing import Any
+
 from . import _query
+from ._driver import wrap_conn
 
 
-async def install(database_url: str) -> None:
-    """Install the Oban schema in the specified database.
+def install_sql() -> str:
+    """Get the SQL for installing Oban.
 
-    Creates all necessary types, tables, and indexes for Oban to function.
+    Returns the raw SQL statements for creating Oban types, tables, and indexes.
+    This is intended for integration with migration frameworks like Django or Alembic.
+
+    Returns:
+        SQL string for schema installation
+
+    Example (Alembic):
+        >>> from alembic import op
+        >>> from oban.schema import install_sql
+        >>>
+        >>> def upgrade():
+        ...     op.execute(install_sql())
+
+    Example (Django):
+        >>> from django.db import migrations
+        >>> from oban.schema import install_sql
+        >>>
+        >>> class Migration(migrations.Migration):
+        ...     operations = [
+        ...         migrations.RunSQL(install_sql()),
+        ...     ]
+    """
+    return _query.load_file("install.sql")
+
+
+def uninstall_sql() -> str:
+    """Get the SQL for uninstalling Oban.
+
+    Returns the raw SQL statements for dropping Oban tables and types.
+    Useful for integration with migration frameworks like Alembic or Django.
+
+    Returns:
+        SQL string for schema uninstallation
+
+    Example (Alembic):
+        >>> from alembic import op
+        >>> from oban.schema import uninstall_sql
+        >>>
+        >>> def downgrade():
+        ...     op.execute(uninstall_sql())
+
+    Example (Django):
+        >>> from django.db import migrations
+        >>> from oban.schema import uninstall_sql
+        >>>
+        >>> class Migration(migrations.Migration):
+        ...     operations = [
+        ...         migrations.RunSQL(uninstall_sql()),
+        ...     ]
+    """
+    return _query.load_file("uninstall.sql")
+
+
+async def install(conn_or_pool: Any) -> None:
+    """Install Oban in the specified database.
+
+    Creates all necessary types, tables, and indexes for Oban to function. The
+    installation is wrapped in a DDL transaction to ensure the operation is
+    atomic.
 
     Args:
-        database_url: PostgreSQL connection URL
+        conn_or_pool: A database connection or pool
 
     Example:
+        >>> from psycopg import AsyncConnection
         >>> from oban.schema import install
         >>>
-        >>> await install("postgresql://user:pass@localhost/mydb")
+        >>> async with await AsyncConnection.connect(DATABASE_URL) as conn:
+        ...     await install(conn)
     """
-    import psycopg
+    driver = wrap_conn(conn_or_pool)
 
-    async with await psycopg.AsyncConnection.connect(database_url) as conn:
-        await _query.install(conn)
-        await conn.commit()
+    async with driver.connection() as conn:
+        async with conn.transaction():
+            await _query.install(conn)
+
+
+async def uninstall(conn_or_pool: Any) -> None:
+    """Uninstall Oban from the specified database.
+
+    Drops all Oban tables and types. The uninstallation is wrapped in a DDL
+    transaction to ensure the operation is atomic.
+
+    Args:
+        conn_or_pool: A database connection or pool
+
+    Example:
+        >>> from psycopg import AsyncConnection
+        >>> from oban.schema import uninstall
+        >>>
+        >>> async with await AsyncConnection.connect(DATABASE_URL) as conn:
+        ...     await uninstall(conn)
+    """
+    driver = wrap_conn(conn_or_pool)
+
+    async with driver.connection() as conn:
+        async with conn.transaction():
+            await _query.uninstall(conn)
