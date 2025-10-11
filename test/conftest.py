@@ -63,7 +63,7 @@ async def oban_instance(request, db_url):
     await pool.wait()
 
     def _create_instance(**overrides):
-        params = {"conn": pool, "stage_interval": 0.01}
+        params = {"conn": pool, "leadership": False, "stage_interval": 0.01}
 
         return Oban(**{**params, **mark_kwargs, **overrides})
 

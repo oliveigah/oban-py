@@ -44,6 +44,26 @@ class Query:
         self._driver = wrap_conn(conn)
         self._prefix = prefix
 
+    async def attempt_leadership(
+        self, name: str, node: str, ttl: int, is_leader: bool
+    ) -> bool:
+        async with self._driver.connection() as conn:
+            async with conn.transaction():
+                cleanup_stmt = load_file("cleanup_expired_leaders.sql", self._prefix)
+
+                await conn.execute(cleanup_stmt)
+
+                if is_leader:
+                    elect_stmt = load_file("reelect_leader.sql", self._prefix)
+                else:
+                    elect_stmt = load_file("elect_leader.sql", self._prefix)
+
+                args = {"name": name, "node": node, "ttl": ttl}
+                rows = await conn.execute(elect_stmt, args)
+                result = await rows.fetchone()
+
+                return result is not None and result[0] == node
+
     async def cancel_job(self, job: Job, reason: str) -> None:
         async with self._driver.connection() as conn:
             stmt = load_file("cancel_job.sql", self._prefix)
@@ -127,6 +147,13 @@ class Query:
             stmt = load_file("install.sql", self._prefix)
 
             await conn.execute(stmt)
+
+    async def resign_leader(self, name: str, node: str) -> None:
+        async with self._driver.connection() as conn:
+            stmt = load_file("resign_leader.sql", self._prefix)
+            args = {"name": name, "node": node}
+
+            await conn.execute(stmt, args)
 
     async def snooze_job(self, job: Job, seconds: int) -> None:
         async with self._driver.connection() as conn:

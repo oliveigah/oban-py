@@ -16,22 +16,22 @@ CREATE TYPE oban_job_state AS ENUM (
 CREATE TABLE oban_jobs (
     id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     state oban_job_state NOT NULL DEFAULT 'available',
-    queue TEXT NOT NULL DEFAULT 'default',
-    worker TEXT NOT NULL,
-    attempt SMALLINT NOT NULL DEFAULT 0,
-    max_attempts SMALLINT NOT NULL DEFAULT 20,
-    priority SMALLINT NOT NULL DEFAULT 0,
-    args JSONB NOT NULL DEFAULT '{}',
-    meta JSONB NOT NULL DEFAULT '{}',
-    tags JSONB NOT NULL DEFAULT '[]',
-    errors JSONB NOT NULL DEFAULT '[]',
-    attempted_by TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-    inserted_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT timezone('UTC', now()),
-    scheduled_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT timezone('UTC', now()),
-    attempted_at TIMESTAMP WITHOUT TIME ZONE,
-    cancelled_at TIMESTAMP WITHOUT TIME ZONE,
-    completed_at TIMESTAMP WITHOUT TIME ZONE,
-    discarded_at TIMESTAMP WITHOUT TIME ZONE,
+    queue text NOT NULL DEFAULT 'default',
+    worker text NOT NULL,
+    attempt smallint NOT NULL DEFAULT 0,
+    max_attempts smallint NOT NULL DEFAULT 20,
+    priority smallint NOT NULL DEFAULT 0,
+    args jsonb NOT NULL DEFAULT '{}',
+    meta jsonb NOT NULL DEFAULT '{}',
+    tags jsonb NOT NULL DEFAULT '[]',
+    errors jsonb NOT NULL DEFAULT '[]',
+    attempted_by text[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    inserted_at timestamp WITHOUT TIME ZONE NOT NULL DEFAULT timezone('UTC', now()),
+    scheduled_at timestamp WITHOUT TIME ZONE NOT NULL DEFAULT timezone('UTC', now()),
+    attempted_at timestamp WITHOUT TIME ZONE,
+    cancelled_at timestamp WITHOUT TIME ZONE,
+    completed_at timestamp WITHOUT TIME ZONE,
+    discarded_at timestamp WITHOUT TIME ZONE,
     CONSTRAINT attempt_range CHECK (attempt >= 0 AND attempt <= max_attempts),
     CONSTRAINT queue_length CHECK (char_length(queue) > 0),
     CONSTRAINT worker_length CHECK (char_length(worker) > 0),
@@ -39,11 +39,11 @@ CREATE TABLE oban_jobs (
     CONSTRAINT non_negative_priority CHECK (priority >= 0)
 );
 
-CREATE TABLE oban_leaders (
-    name TEXT PRIMARY KEY,
-    node TEXT NOT NULL,
-    started_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-    expires_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
+CREATE UNLOGGED TABLE oban_leaders (
+    name text PRIMARY KEY DEFAULT 'oban',
+    node text NOT NULL,
+    elected_at timestamp WITHOUT TIME ZONE NOT NULL,
+    expires_at timestamp WITHOUT TIME ZONE NOT NULL
 );
 
 -- Indexes

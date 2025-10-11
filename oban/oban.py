@@ -5,9 +5,10 @@ import socket
 from typing import Any
 from uuid import uuid4
 
-from ._query import Query
 from .job import Job
+from .leader import Leader
 from ._producer import Producer
+from ._query import Query
 from ._stager import Stager
 
 _instances: dict[str, Oban] = {}
@@ -18,6 +19,7 @@ class Oban:
         self,
         *,
         conn: Any,
+        leadership: bool | None = None,
         name: str = "oban",
         node: str | None = None,
         prefix: str = "public",
@@ -26,8 +28,15 @@ class Oban:
     ) -> None:
         """Initialize an Oban instance.
 
+        Oban can run in two modes:
+        - Server mode: When queues are configured, this instance processes jobs.
+          Leadership is enabled by default to coordinate cluster-wide operations.
+        - Client mode: When no queues are configured, this instance only enqueues jobs.
+          Leadership is disabled by default.
+
         Args:
             conn: Database connection or pool (e.g., AsyncConnection or AsyncConnectionPool)
+            leadership: Enable leadership election (default: True if queues configured, False otherwise)
             name: Name for this instance in the registry (default: "oban")
             node: Node identifier for this instance (default: socket.gethostname())
             prefix: PostgreSQL schema where Oban tables are located (default: "public")
@@ -35,6 +44,9 @@ class Oban:
             stage_interval: How often to stage scheduled jobs, in seconds (default: 1.0)
         """
         queues = queues or {}
+
+        if leadership is None:
+            leadership = bool(queues)
 
         for queue, limit in queues.items():
             if limit < 1:
@@ -64,6 +76,12 @@ class Oban:
             stage_interval=stage_interval,
         )
 
+        self._leader = (
+            Leader(query=self._query, node=self._node, name=name)
+            if leadership
+            else None
+        )
+
         _instances[name] = self
 
     async def __aenter__(self) -> Oban:
@@ -71,6 +89,20 @@ class Oban:
 
     async def __aexit__(self, _exc_type, _exc_val, _exc_tb) -> None:
         await self.stop()
+
+    @property
+    def is_leader(self) -> bool:
+        """Check if this node is currently the leader.
+
+        Returns False if leadership is not enabled for this instance. Otherwise, it indicates
+        whether this instance is acting as leader.
+
+        Example:
+            >>> async with Oban(conn=conn, leadership=true) as conn:
+            ...     if oban.is_leader:
+            ...         # Perform leader-only operation
+        """
+        return self._leader.is_leader if self._leader else False
 
     async def _verify_structure(self) -> None:
         existing = await self._query.verify_structure()
@@ -88,6 +120,9 @@ class Oban:
         for queue, producer in self._producers.items():
             await producer.start()
 
+        if self._leader:
+            await self._leader.start()
+
         await self._stager.start()
 
         return self
@@ -97,6 +132,9 @@ class Oban:
 
         for producer in self._producers.values():
             await producer.stop()
+
+        if self._leader:
+            await self._leader.stop()
 
     async def enqueue(self, job: Job) -> Job:
         """Insert a job into the database for processing.

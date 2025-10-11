@@ -46,7 +46,7 @@ class TestInstallSql:
 
         assert "CREATE TYPE isolated.oban_job_state" in sql
         assert "CREATE TABLE isolated.oban_jobs" in sql
-        assert "CREATE TABLE isolated.oban_leaders" in sql
+        assert "CREATE UNLOGGED TABLE isolated.oban_leaders" in sql
         assert "CREATE INDEX" in sql
 
     def test_scoping_elements_to_the_prefix(self):
@@ -54,7 +54,7 @@ class TestInstallSql:
 
         assert "CREATE TYPE public.oban_job_state" in sql
         assert "CREATE TABLE public.oban_jobs" in sql
-        assert "CREATE TABLE public.oban_leaders" in sql
+        assert "CREATE UNLOGGED TABLE public.oban_leaders" in sql
         assert "CREATE INDEX" in sql
 
 
