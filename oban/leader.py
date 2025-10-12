@@ -28,11 +28,7 @@ class Leader:
     ) -> None:
         """Initialize a Leader instance.
 
-        Args:
-            interval: Election interval in seconds (default: 30.0)
-            name: Leadership name/key (default: "oban")
-            node: Node identifier for this instance
-            query: Query instance for database operations
+        Leader instances shouldn't be created directly, as it's handled by the parent oban instance.
         """
         self._interval = interval
         self._name = name
