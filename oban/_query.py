@@ -149,6 +149,16 @@ class Query:
 
             await conn.execute(stmt)
 
+    async def prune_jobs(self, max_age: int, limit: int) -> int:
+        async with self._driver.connection() as conn:
+            async with conn.transaction():
+                stmt = load_file("prune_jobs.sql", self._prefix)
+                args = {"max_age": max_age, "limit": limit}
+
+                result = await conn.execute(stmt, args)
+
+                return result.rowcount
+
     async def resign_leader(self, name: str, node: str) -> None:
         async with self._driver.connection() as conn:
             stmt = load_file("resign_leader.sql", self._prefix)

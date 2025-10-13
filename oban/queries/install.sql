@@ -48,14 +48,27 @@ CREATE UNLOGGED TABLE oban_leaders (
 
 -- Indexes
 
-CREATE INDEX oban_jobs_meta_index ON oban_jobs USING gin (meta);
-
 CREATE INDEX oban_jobs_state_queue_priority_scheduled_at_id_index
 ON oban_jobs (state, queue, priority, scheduled_at, id);
 
 CREATE INDEX oban_jobs_staging_index
 ON oban_jobs (scheduled_at, id)
 WHERE state IN ('scheduled', 'retryable');
+
+CREATE INDEX oban_jobs_meta_index
+ON oban_jobs USING gin (meta);
+
+CREATE INDEX oban_jobs_completed_at_index
+ON oban_jobs (completed_at)
+WHERE state = 'completed';
+
+CREATE INDEX oban_jobs_cancelled_at_index
+ON oban_jobs (cancelled_at)
+WHERE state = 'cancelled';
+
+CREATE INDEX oban_jobs_discarded_at_index
+ON oban_jobs (discarded_at)
+WHERE state = 'discarded';
 
 -- Autovacuum
 

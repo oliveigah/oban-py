@@ -21,6 +21,7 @@ class Leader:
     def __init__(
         self,
         *,
+        enabled: bool = True,
         interval: float = 30.0,
         name: str = "oban",
         node: str,
@@ -30,6 +31,7 @@ class Leader:
 
         Leader instances shouldn't be created directly, as it's handled by the parent oban instance.
         """
+        self._enabled = enabled
         self._interval = interval
         self._name = name
         self._node = node
@@ -44,6 +46,10 @@ class Leader:
         return self._is_leader
 
     async def start(self) -> None:
+        if not self._enabled:
+            self._started.set()
+            return
+
         self._loop_task = asyncio.create_task(self._loop(), name="oban-leader")
 
         await self._started.wait()

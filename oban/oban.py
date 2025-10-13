@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import socket
 
 from typing import Any
@@ -8,6 +9,7 @@ from uuid import uuid4
 from .job import Job
 from .leader import Leader
 from ._producer import Producer
+from ._pruner import Pruner
 from ._query import Query
 from ._stager import Stager
 
@@ -23,6 +25,7 @@ class Oban:
         name: str = "oban",
         node: str | None = None,
         prefix: str = "public",
+        pruner: dict[str, Any] = {},
         queues: dict[str, int] | None = None,
         stage_interval: float = 1.0,
     ) -> None:
@@ -40,6 +43,8 @@ class Oban:
             name: Name for this instance in the registry (default: "oban")
             node: Node identifier for this instance (default: socket.gethostname())
             prefix: PostgreSQL schema where Oban tables are located (default: "public")
+            pruner: Pruning configuration options: max_age in seconds (default: 86_400.0, 1 day),
+                    interval (default: 60.0), limit (default: 20_000).
             queues: Queue names mapped to worker limits (default: {})
             stage_interval: How often to stage scheduled jobs, in seconds (default: 1.0)
         """
@@ -76,11 +81,11 @@ class Oban:
             stage_interval=stage_interval,
         )
 
-        self._leader = (
-            Leader(query=self._query, node=self._node, name=name)
-            if leadership
-            else None
+        self._leader = Leader(
+            query=self._query, node=self._node, name=name, enabled=leadership
         )
+
+        self._pruner = Pruner(query=self._query, leader=self._leader, **pruner)
 
         _instances[name] = self
 
@@ -102,39 +107,28 @@ class Oban:
             ...     if oban.is_leader:
             ...         # Perform leader-only operation
         """
-        return self._leader.is_leader if self._leader else False
-
-    async def _verify_structure(self) -> None:
-        existing = await self._query.verify_structure()
-
-        for table in ["oban_jobs", "oban_leaders"]:
-            if table not in existing:
-                raise RuntimeError(
-                    f"The '{table}' is missing, run schema installation first."
-                )
+        return self._leader.is_leader
 
     async def start(self) -> Oban:
         if self._producers:
             await self._verify_structure()
 
-        for queue, producer in self._producers.items():
-            await producer.start()
+        tasks = [self._leader.start(), self._stager.start(), self._pruner.start()]
 
-        if self._leader:
-            await self._leader.start()
+        for producer in self._producers.values():
+            tasks.append(producer.start())
 
-        await self._stager.start()
+        await asyncio.gather(*tasks)
 
         return self
 
     async def stop(self) -> None:
-        await self._stager.stop()
+        tasks = [self._leader.stop(), self._stager.stop(), self._pruner.stop()]
 
         for producer in self._producers.values():
-            await producer.stop()
+            tasks.append(producer.stop())
 
-        if self._leader:
-            await self._leader.stop()
+        await asyncio.gather(*tasks)
 
     async def enqueue(self, job: Job) -> Job:
         """Insert a job into the database for processing.
@@ -182,6 +176,18 @@ class Oban:
             >>> await oban.enqueue_many(job1, job2, job3)
         """
         return await self._query.insert_jobs(list(jobs))
+
+    def _connection(self):
+        return self._query._driver.connection()
+
+    async def _verify_structure(self) -> None:
+        existing = await self._query.verify_structure()
+
+        for table in ["oban_jobs", "oban_leaders"]:
+            if table not in existing:
+                raise RuntimeError(
+                    f"The '{table}' is missing, run schema installation first."
+                )
 
 
 def get_instance(name: str = "oban") -> Oban:

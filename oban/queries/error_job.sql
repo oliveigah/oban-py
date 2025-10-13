@@ -10,7 +10,7 @@ SET
                  END,
   scheduled_at = CASE WHEN attempt >= max_attempts
                  THEN scheduled_at
-                 ELSE timezone('UTC', now()) + format('%%s seconds', %(seconds)s)::interval
+                 ELSE timezone('UTC', now()) + make_interval(secs => %(seconds)s)
                  END,
   errors = errors || jsonb_build_object('attempt', %(attempt)s, 'at', timezone('UTC', now()), 'error', %(error)s::text)
 WHERE
