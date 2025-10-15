@@ -1,5 +1,6 @@
-import asyncio
 import pytest
+
+from .helpers import with_backoff
 
 
 class TestLeadership:
@@ -68,13 +69,11 @@ class TestLeadership:
 
             await lead.stop()
 
-            # The default interval is 30.0s, this waits 0.5s total
-            for _ in range(100):
-                if peer.is_leader:
-                    break
-                await asyncio.sleep(0.005)
+            # The default interval is 30.0s, notification makes it immediate
+            def assert_peer_is_leader():
+                assert peer.is_leader
 
-            assert peer.is_leader
+            await with_backoff(assert_peer_is_leader, timeout=0.5)
         finally:
             await oban_1.stop()
             await oban_2.stop()

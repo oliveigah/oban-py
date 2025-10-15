@@ -1,8 +1,8 @@
-import asyncio
 import pytest
 import time
 from datetime import datetime, timedelta, timezone
 
+from .helpers import with_backoff
 from oban import Cancel, Snooze, worker
 
 
@@ -26,24 +26,6 @@ class Worker:
                 return None
             case _:
                 return None
-
-
-async def with_backoff(check_fn, timeout=1.0, interval=0.01):
-    start = time.time()
-    last_error = None
-
-    while time.time() - start < timeout:
-        try:
-            result = check_fn()
-            if asyncio.iscoroutine(result):
-                await result
-            return
-        except AssertionError as error:
-            last_error = error
-            await asyncio.sleep(interval)
-
-    if last_error:
-        raise last_error
 
 
 class TestEnqueue:
