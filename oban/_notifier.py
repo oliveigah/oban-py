@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import gzip
+import json
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 from uuid import uuid4
@@ -11,6 +14,42 @@ from ._backoff import jittery_exponential
 
 if TYPE_CHECKING:
     from ._query import Query
+
+
+def encode_payload(payload: dict) -> str:
+    """Encode a dict payload to an efficient format for publishing.
+
+    Args:
+        payload: Dict to encode
+
+    Returns:
+        Base64-encoded gzipped JSON string
+    """
+    dumped = json.dumps(payload).encode("utf-8")
+    zipped = gzip.compress(dumped)
+
+    return base64.b64encode(zipped).decode("ascii")
+
+
+def decode_payload(payload: str) -> dict:
+    """Decode a payload string to a dict.
+
+    Handles both compressed (base64+gzip) and plain JSON payloads.
+
+    Args:
+        payload: Payload string to decode
+
+    Returns:
+        Decoded dict
+    """
+    # Payloads created by SQL queries won't be encoded or compressed.
+    if payload.startswith("{"):
+        return json.loads(payload)
+    else:
+        decoded = base64.b64decode(payload)
+        unzipped = gzip.decompress(decoded)
+
+        return json.loads(unzipped.decode("utf-8"))
 
 
 @runtime_checkable
@@ -29,19 +68,19 @@ class Notifier(Protocol):
         """Stop the notifier and clean up resources."""
         ...
 
-    async def listen(self, channel: str, callback: Callable[[str, str], Any]) -> str:
+    async def listen(self, channel: str, callback: Callable[[str, dict], Any]) -> str:
         """Register a callback for a channel.
 
         Args:
             channels: Channel name to listen on
-            callback: Async function called when notification received.
-                     Receives (channel, payload) as arguments.
+            callback: Function called when notification received.
+                     Receives (channel, payload) as arguments where payload is a dict.
 
         Returns:
             Token (UUID string) used to unregister this subscription
 
         Example:
-            >>> async def handler(channel: str, payload: str):
+            >>> async def handler(channel: str, payload: dict):
             ...     print(f"Received on {channel}: {payload}")
             ...
             >>> token = await notifier.listen("insert", handler)
@@ -60,15 +99,15 @@ class Notifier(Protocol):
         """
         ...
 
-    async def notify(self, channel: str, payload: str = "") -> None:
+    async def notify(self, channel: str, payload: dict) -> None:
         """Send a notification to a channel.
 
         Args:
             channel: Channel name to send notification on
-            payload: Optional payload string (default: empty string)
+            payload: Payload dict to send
 
         Example:
-            >>> await notifier.notify("insert", "")
+            >>> await notifier.notify("insert", {"queue": "default"})
         """
         ...
 
@@ -116,7 +155,7 @@ class PostgresNotifier:
         except Exception:
             pass
 
-    async def listen(self, channel: str, callback: Callable[[str, str], Any]) -> str:
+    async def listen(self, channel: str, callback: Callable[[str, dict], Any]) -> str:
         token = str(uuid4())
 
         if channel not in self._subscriptions:
@@ -146,8 +185,8 @@ class PostgresNotifier:
                 del self._subscriptions[channel]
                 self._pending_unlisten.add(channel)
 
-    async def notify(self, channel: str, payload: str = "") -> None:
-        await self._query.notify(channel, payload)
+    async def notify(self, channel: str, payload: dict) -> None:
+        await self._query.notify(channel, encode_payload(payload))
 
     async def _connect(self) -> None:
         async with self._query._driver.connection() as temp_conn:
@@ -215,7 +254,7 @@ class PostgresNotifier:
 
     async def _dispatch(self, notify) -> None:
         channel = notify.channel
-        payload = notify.payload
+        payload = decode_payload(notify.payload)
 
         if channel in self._subscriptions:
             for callback in self._subscriptions[channel].values():
