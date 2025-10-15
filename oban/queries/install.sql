@@ -83,18 +83,27 @@ WHERE state = 'discarded';
 -- Autovacuum
 
 ALTER TABLE oban_jobs SET (
-  -- Vacuum early, at 5% dead or 1000 dead rows
-  autovacuum_vacuum_scale_factor = 0.05,
-  autovacuum_vacuum_threshold = 1000,
+  -- Vacuum earlier on large tables
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_threshold = 50,
 
-  -- Analyze even earlier to keep the planner up to date
-  autovacuum_analyze_scale_factor = 0.025,
-  autovacuum_analyze_threshold = 500,
+  -- Keep stats fresh for the planner
+  autovacuum_analyze_scale_factor = 0.02,
+  autovacuum_analyze_threshold = 100,
 
-  -- Run vacuum more aggressively with minimal sleep and 10x the default IO
+  -- Make autovacuum push harder with little/no sleeping
   autovacuum_vacuum_cost_limit = 2000,
-  autovacuum_vacuum_cost_delay = 10,
+  autovacuum_vacuum_cost_delay = 1,
 
-  -- Reserve 10% free space per page for HOT updates
+  -- Handle insert-heavy spikes (PG13+)
+  autovacuum_vacuum_insert_scale_factor = 0.02,
+  autovacuum_vacuum_insert_threshold = 1000,
+
+  -- Leave headroom on pages for locality and fewer page splits
+  fillfactor = 85
+);
+
+-- Reduce page splits on the primary hot index
+ALTER INDEX CONCURRENTLY oban_jobs_state_queue_priority_scheduled_at_id_index SET (
   fillfactor = 90
 );
