@@ -59,7 +59,8 @@ CREATE UNLOGGED TABLE oban_producers (
 -- Indexes
 
 CREATE INDEX oban_jobs_state_queue_priority_scheduled_at_id_index
-ON oban_jobs (state, queue, priority, scheduled_at, id);
+ON oban_jobs (state, queue, priority, scheduled_at, id)
+WITH (fillfactor = 90);
 
 CREATE INDEX oban_jobs_staging_index
 ON oban_jobs (scheduled_at, id)
@@ -101,9 +102,4 @@ ALTER TABLE oban_jobs SET (
 
   -- Leave headroom on pages for locality and fewer page splits
   fillfactor = 85
-);
-
--- Reduce page splits on the primary hot index
-ALTER INDEX oban_jobs_state_queue_priority_scheduled_at_id_index SET (
-  fillfactor = 90
 );
