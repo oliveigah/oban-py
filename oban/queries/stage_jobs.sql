@@ -5,18 +5,31 @@ WITH locked_jobs AS (
     oban_jobs
   WHERE
     state = ANY('{scheduled,retryable}')
+    AND queue = ANY(%(queues)s)
     AND scheduled_at <= timezone('UTC', now())
   ORDER BY
     scheduled_at ASC, id ASC
   LIMIT
     %(limit)s
   FOR UPDATE SKIP LOCKED
+),
+updated_jobs AS (
+  UPDATE
+    oban_jobs
+  SET
+    state = 'available'::oban_job_state
+  FROM
+    locked_jobs
+  WHERE
+    oban_jobs.id = locked_jobs.id
 )
-UPDATE
-  oban_jobs
-SET
-  state = 'available'::oban_job_state
+SELECT DISTINCT
+  q.queue
 FROM
-  locked_jobs
+  unnest(%(queues)s::text[]) AS q(queue)
 WHERE
-  oban_jobs.id = locked_jobs.id;
+  EXISTS (
+    SELECT 1
+    FROM oban_jobs
+    WHERE state = 'available' AND queue = q.queue
+  )

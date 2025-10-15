@@ -4,6 +4,8 @@ import asyncio
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .leader import Leader
+    from ._notifier import Notifier
     from ._producer import Producer
     from ._query import Query
 
@@ -13,21 +15,32 @@ class Stager:
         self,
         *,
         query: Query,
+        notifier: Notifier,
         producers: dict[str, Producer],
+        leader: Leader,
         stage_interval: float = 1.0,
         stage_limit: int = 20_000,
     ) -> None:
         self._query = query
+        self._notifier = notifier
         self._producers = producers
+        self._leader = leader
         self._stage_interval = stage_interval
         self._stage_limit = stage_limit
 
         self._loop_task = None
+        self._listen_token = None
 
     async def start(self) -> None:
+        self._listen_token = await self._notifier.listen(
+            "insert", self._on_insert_notification, wait=False
+        )
         self._loop_task = asyncio.create_task(self._loop(), name="oban-stager")
 
     async def stop(self) -> None:
+        if self._listen_token:
+            await self._notifier.unlisten(self._listen_token)
+
         if self._loop_task:
             self._loop_task.cancel()
             try:
@@ -46,11 +59,14 @@ class Stager:
 
             await asyncio.sleep(self._stage_interval)
 
+    async def _on_insert_notification(self, channel: str, payload: dict) -> None:
+        queue = payload["queue"]
+
+        if queue in self._producers:
+            await self._producers[queue].notify()
+
     async def _stage(self) -> None:
-        await self._query.stage_jobs(self._stage_limit)
+        queues = list(self._producers.keys())
 
-        available = await self._query.check_available_queues()
-
-        for queue in available:
-            if queue in self._producers:
-                await self._producers[queue].notify()
+        for queue in await self._query.stage_jobs(self._stage_limit, queues):
+            await self._producers[queue].notify()

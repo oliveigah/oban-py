@@ -56,14 +56,6 @@ class Query:
 
             await conn.execute(stmt, args)
 
-    async def check_available_queues(self) -> list[str]:
-        async with self._driver.connection() as conn:
-            stmt = load_file("check_available_queues.sql", self._prefix)
-            rows = await conn.execute(stmt, {})
-            results = await rows.fetchall()
-
-            return [queue for (queue,) in results]
-
     async def complete_job(self, job: Job) -> None:
         async with self._driver.connection() as conn:
             stmt = load_file("complete_job.sql", self._prefix)
@@ -106,7 +98,7 @@ class Query:
 
     async def insert_jobs(self, jobs: list[Job]) -> list[Job]:
         async with self._driver.connection() as conn:
-            stmt = load_file("insert_many.sql", self._prefix)
+            stmt = load_file("insert_jobs.sql", self._prefix)
             args = defaultdict(list)
 
             for job in jobs:
@@ -122,8 +114,9 @@ class Query:
                     job,
                     id=row[0],
                     inserted_at=row[1],
-                    scheduled_at=row[2],
-                    state=row[3],
+                    queue=row[2],
+                    scheduled_at=row[3],
+                    state=row[4],
                 )
                 for job, row in zip(jobs, rows)
             ]
@@ -154,13 +147,16 @@ class Query:
 
             await conn.execute(stmt, args)
 
-    async def stage_jobs(self, limit: int) -> None:
+    async def stage_jobs(self, limit: int, queues: list[str]) -> list[str]:
         async with self._driver.connection() as conn:
             async with conn.transaction():
                 stmt = load_file("stage_jobs.sql", self._prefix)
-                args = {"limit": limit}
+                args = {"limit": limit, "queues": queues}
 
-                await conn.execute(stmt, args)
+                result = await conn.execute(stmt, args)
+                rows = await result.fetchall()
+
+                return [queue for (queue,) in rows]
 
     # Leadership
 

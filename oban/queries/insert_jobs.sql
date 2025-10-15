@@ -38,4 +38,4 @@ INSERT INTO oban_jobs(
     tags,
     worker
 FROM raw_job_data
-RETURNING id, inserted_at, scheduled_at, state;
+RETURNING id, inserted_at, queue, scheduled_at, state;

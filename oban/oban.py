@@ -94,6 +94,7 @@ class Oban:
             query=self._query,
             notifier=self._notifier,
             producers=self._producers,
+            leader=self._leader,
             stage_interval=stage_interval,
         )
 
@@ -184,7 +185,7 @@ class Oban:
 
             >>> await EmailWorker.enqueue({"to": "user@example.com", "subject": "Welcome"})
         """
-        result = await self._query.insert_jobs([job])
+        result = await self.enqueue_many(job)
 
         return result[0]
 
@@ -209,7 +210,14 @@ class Oban:
             >>>
             >>> await oban.enqueue_many(job1, job2, job3)
         """
-        return await self._query.insert_jobs(list(jobs))
+        result = await self._query.insert_jobs(list(jobs))
+
+        queues = {job.queue for job in result if job.state == "available"}
+
+        for queue in queues:
+            await self._notifier.notify("insert", {"queue": queue})
+
+        return result
 
     def _connection(self):
         return self._query._driver.connection()
