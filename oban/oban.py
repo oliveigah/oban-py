@@ -92,7 +92,7 @@ class Oban:
             notifier=self._notifier,
             producers=self._producers,
             leader=self._leader,
-            **stager
+            **stager,
         )
 
         self._lifeline = Lifeline(leader=self._leader, query=self._query, **lifeline)

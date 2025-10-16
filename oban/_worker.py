@@ -1,6 +1,6 @@
 import importlib
 
-_worker_registry: dict[str, type] = {}
+_registry: dict[str, type] = {}
 
 
 def resolve_worker(path: str) -> type:
@@ -9,8 +9,8 @@ def resolve_worker(path: str) -> type:
     First checks the worker registry for dynamically defined workers,
     then falls back to importing the module.
     """
-    if path in _worker_registry:
-        return _worker_registry[path]
+    if path in _registry:
+        return _registry[path]
 
     parts = path.split(".")
     mod_name, cls_name = ".".join(parts[:-1]), parts[-1]
