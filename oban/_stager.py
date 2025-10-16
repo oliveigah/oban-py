@@ -18,15 +18,15 @@ class Stager:
         notifier: Notifier,
         producers: dict[str, Producer],
         leader: Leader,
-        stage_interval: float = 1.0,
-        stage_limit: int = 20_000,
+        interval: float = 1.0,
+        limit: int = 20_000,
     ) -> None:
         self._query = query
         self._notifier = notifier
         self._producers = producers
         self._leader = leader
-        self._stage_interval = stage_interval
-        self._stage_limit = stage_limit
+        self._interval = interval
+        self._limit = limit
 
         self._loop_task = None
         self._listen_token = None
@@ -57,7 +57,7 @@ class Stager:
             except Exception:
                 pass
 
-            await asyncio.sleep(self._stage_interval)
+            await asyncio.sleep(self._interval)
 
     async def _on_insert_notification(self, channel: str, payload: dict) -> None:
         queue = payload["queue"]
@@ -68,5 +68,5 @@ class Stager:
     async def _stage(self) -> None:
         queues = list(self._producers.keys())
 
-        for queue in await self._query.stage_jobs(self._stage_limit, queues):
+        for queue in await self._query.stage_jobs(self._limit, queues):
             await self._producers[queue].notify()

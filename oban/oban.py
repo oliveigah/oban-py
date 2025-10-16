@@ -32,7 +32,7 @@ class Oban:
         pruner: dict[str, Any] = {},
         queues: dict[str, int] | None = None,
         refresher: dict[str, Any] = {},
-        stage_interval: float = 1.0,
+        stager: dict[str, Any] = {},
     ) -> None:
         """Initialize an Oban instance.
 
@@ -46,16 +46,16 @@ class Oban:
         Args:
             conn: Database connection or pool (e.g., AsyncConnection or AsyncConnectionPool)
             leadership: Enable leadership election (default: True if queues configured, False otherwise)
-            lifeline: Lifeline configuration options: interval (default: 60.0)
+            lifeline: Lifeline config options: interval (default: 60.0)
             name: Name for this instance in the registry (default: "oban")
             node: Node identifier for this instance (default: socket.gethostname())
             notifier: Notifier instance for pub/sub (default: PostgresNotifier with default config)
             prefix: PostgreSQL schema where Oban tables are located (default: "public")
-            pruner: Pruning configuration options: max_age in seconds (default: 86_400.0, 1 day),
+            pruner: Pruning config options: max_age in seconds (default: 86_400.0, 1 day),
                     interval (default: 60.0), limit (default: 20_000).
             queues: Queue names mapped to worker limits (default: {})
-            refresher: Refresher configuration options: interval (default: 15.0), max_age (default: 60.0)
-            stage_interval: How often to stage scheduled jobs, in seconds (default: 1.0)
+            refresher: Refresher config options: interval (default: 15.0), max_age (default: 60.0)
+            stager: Stager config options: interval (default: 1.0), limit (default: 20_000)
         """
         queues = queues or {}
 
@@ -65,9 +65,6 @@ class Oban:
         for queue, limit in queues.items():
             if limit < 1:
                 raise ValueError(f"Queue '{queue}' limit must be positive")
-
-        if stage_interval <= 0:
-            raise ValueError("stage_interval must be positive")
 
         self._name = name
         self._node = node or socket.gethostname()
@@ -95,7 +92,7 @@ class Oban:
             notifier=self._notifier,
             producers=self._producers,
             leader=self._leader,
-            stage_interval=stage_interval,
+            **stager
         )
 
         self._lifeline = Lifeline(leader=self._leader, query=self._query, **lifeline)
