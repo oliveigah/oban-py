@@ -11,8 +11,8 @@ if TYPE_CHECKING:
 class Leader:
     """Manages leadership election and coordination across Oban nodes.
 
-    This class is managed internally by Oban. Users should not construct Leader instances
-    directly. Instead, check leadership status via the Oban.is_leader property:
+    This class is managed internally by Oban and shouldn't be constructed directly.
+    Instead, check leadership status via the Oban.is_leader property:
 
         >>> async with Oban(conn=conn, queues={"default": 10}) as oban:
         ...     if oban.is_leader:
@@ -29,10 +29,6 @@ class Leader:
         notifier: Notifier,
         query: Query,
     ) -> None:
-        """Initialize a Leader instance.
-
-        Leader instances shouldn't be created directly, as it's handled by the parent oban instance.
-        """
         self._enabled = enabled
         self._interval = interval
         self._name = name

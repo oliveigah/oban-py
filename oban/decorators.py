@@ -10,9 +10,9 @@ import inspect
 from functools import wraps
 from typing import Any, Callable
 
-from .cron import register_scheduled
 from .job import Job
 from .types import Result
+from ._scheduler import register_scheduled
 from ._worker import register_worker, worker_name
 
 

@@ -4,13 +4,26 @@ import asyncio
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .leader import Leader
+    from ._leader import Leader
     from ._notifier import Notifier
     from ._producer import Producer
     from ._query import Query
 
 
 class Stager:
+    """Manages moving jobs to the 'available' state and notifying queues.
+
+    This class is managed internally by Oban and shouldn't be constructed directly.
+    Instead, configure staging via the Oban constructor:
+
+        >>> async with Oban(
+        ...     conn=conn,
+        ...     queues={"default": 10},
+        ...     stager={"interval": 1.0, "limit": 20_000}
+        ... ) as oban:
+        ...     # Stager runs automatically in the background
+    """
+
     def __init__(
         self,
         *,

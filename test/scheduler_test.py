@@ -4,7 +4,7 @@ import random
 from datetime import datetime, timezone
 
 from oban import job, worker
-from oban.cron import Expression, Scheduler, _scheduled_entries
+from oban._scheduler import Expression, Scheduler, _scheduled_entries
 
 
 class TestExpressionParse:
@@ -234,7 +234,9 @@ class TestSchedulerEvaluate:
         assert job.worker.endswith("EveryMinuteWorker")
 
     @pytest.mark.asyncio
-    async def test_does_not_enqueue_non_matching_expressions(self, scheduler, mock_query):
+    async def test_does_not_enqueue_non_matching_expressions(
+        self, scheduler, mock_query
+    ):
         @worker(cron="0 0 1 1 *")
         class NewYearWorker:
             def process(self, job):

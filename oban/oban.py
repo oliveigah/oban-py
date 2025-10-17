@@ -6,7 +6,7 @@ import socket
 from typing import Any
 
 from .job import Job
-from .leader import Leader
+from ._leader import Leader
 from ._lifeline import Lifeline
 from ._notifier import Notifier, PostgresNotifier
 from ._producer import Producer

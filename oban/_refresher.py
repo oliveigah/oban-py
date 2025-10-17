@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._producer import Producer
-    from .leader import Leader
+    from ._leader import Leader
     from ._query import Query
 
 

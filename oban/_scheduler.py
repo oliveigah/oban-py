@@ -10,7 +10,7 @@ from ._worker import worker_name
 
 if TYPE_CHECKING:
     from .job import Job
-    from .leader import Leader
+    from ._leader import Leader
     from ._query import Query
 
 _DOW_ALIASES = {
@@ -229,6 +229,19 @@ class Expression:
 
 
 class Scheduler:
+    """Manages periodic job scheduling based on cron expressions.
+
+    This class is managed internally by Oban and shouldn't be constructed directly.
+    Instead, configure scheduling via the Oban constructor:
+
+        >>> async with Oban(
+        ...     conn=conn,
+        ...     queues={"default": 10},
+        ...     scheduler={"timezone": timezone.utc}
+        ... ) as oban:
+        ...     # Scheduler runs automatically in the background
+    """
+
     def __init__(
         self,
         *,

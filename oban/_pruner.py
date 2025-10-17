@@ -4,11 +4,24 @@ import asyncio
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .leader import Leader
+    from ._leader import Leader
     from ._query import Query
 
 
 class Pruner:
+    """Manages periodic deletion of completed, cancelled, and discarded jobs.
+
+    This class is managed internally by Oban and shouldn't be constructed directly.
+    Instead, configure pruning via the Oban constructor:
+
+        >>> async with Oban(
+        ...     conn=conn,
+        ...     queues={"default": 10},
+        ...     pruner={"max_age": 86_400, "interval": 60.0, "limit": 20_000}
+        ... ) as oban:
+        ...     # Pruner runs automatically in the background
+    """
+
     def __init__(
         self,
         *,
