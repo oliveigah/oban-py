@@ -284,7 +284,7 @@ class TestSchedulerEvaluate:
         chi_now = datetime.now(chi_tz)
         utc_now = datetime.now(timezone.utc)
 
-        scheduler = Scheduler(leader=None, query=mock_query, timezone=chi_tz)
+        scheduler = Scheduler(leader=None, query=mock_query, timezone="America/Chicago")
 
         @worker(queue="chi", cron=f"* {chi_now.hour} * * *")
         class ChiWorker:
@@ -300,6 +300,31 @@ class TestSchedulerEvaluate:
 
         assert len(mock_query.enqueued_jobs) == 1
         assert mock_query.enqueued_jobs[0].queue == "chi"
+
+    @pytest.mark.asyncio
+    async def test_per_job_timezone_override(self, mock_query):
+        chi_tz = ZoneInfo("America/Chicago")
+        los_tz = ZoneInfo("America/Los_Angeles")
+        chi_now = datetime.now(chi_tz)
+        los_now = datetime.now(los_tz)
+
+        scheduler = Scheduler(
+            leader=None, query=mock_query, timezone="America/Los_Angeles"
+        )
+
+        @worker(cron={"expr": f"* {chi_now.hour} * * *", "timezone": "America/Chicago"})
+        class ChiWorker:
+            def process(self, job):
+                pass
+
+        @worker(cron=f"* {los_now.hour} * * *")
+        class LosWorker:
+            def process(self, job):
+                pass
+
+        await scheduler._evaluate()
+
+        assert len(mock_query.enqueued_jobs) == 2
 
 
 class TestSchedulerTimeToNextMinute:

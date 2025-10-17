@@ -16,7 +16,7 @@ from ._scheduler import register_scheduled
 from ._worker import register_worker, worker_name
 
 
-def worker(*, oban: str = "oban", cron: str | None = None, **overrides):
+def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
     """Decorate a class to make it a viable worker.
 
     The decorator adds worker functionality to a class, including job creation
@@ -26,7 +26,9 @@ def worker(*, oban: str = "oban", cron: str | None = None, **overrides):
 
     Args:
         oban: Name of the Oban instance to use (default: "oban")
-        cron: Optional cron expression for periodic execution (e.g., "0 0 * * *" or "@daily")
+        cron: Optional cron configuration for periodic execution. Can be:
+              - A string expression (e.g., "0 0 * * *" or "@daily")
+              - A dict with "expr" and optional "timezone" keys (timezone as string)
         **overrides: Configuration options for the worker (queue, priority, etc.)
 
     Returns:
@@ -61,6 +63,13 @@ def worker(*, oban: str = "oban", cron: str | None = None, **overrides):
         ... class DailyCleanup:
         ...     def process(self, job):
         ...         print("Running daily cleanup")
+        ...         return None
+        >>>
+        >>> # Periodic worker with timezone
+        >>> @worker(queue="reports", cron={"expr": "0 9 * * MON-FRI", "timezone": "America/New_York"})
+        ... class BusinessHoursReport:
+        ...     def process(self, job):
+        ...         print("Running during NY business hours")
         ...         return None
         >>>
         >>> # Workers can also be created without args
@@ -121,7 +130,7 @@ def worker(*, oban: str = "oban", cron: str | None = None, **overrides):
     return decorate
 
 
-def job(*, oban: str = "oban", cron: str | None = None, **overrides):
+def job(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
     """Decorate a function to make it an Oban job.
 
     The decorated function's signature is preserved for new() and enqueue().
@@ -131,7 +140,9 @@ def job(*, oban: str = "oban", cron: str | None = None, **overrides):
 
     Args:
         oban: Name of the Oban instance to use (default: "oban")
-        cron: Optional cron expression for periodic execution (e.g., "0 0 * * *" or "@daily")
+        cron: Optional cron configuration for periodic execution. Can be:
+              - A string expression (e.g., "0 0 * * *" or "@daily")
+              - A dict with "expr" and optional "timezone" keys (timezone as string)
         **overrides: Configuration options (queue, priority, etc.)
 
     Example:

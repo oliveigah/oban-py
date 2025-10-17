@@ -57,7 +57,7 @@ class Oban:
                     interval (default: 60.0), limit (default: 20_000).
             queues: Queue names mapped to worker limits (default: {})
             refresher: Refresher config options: interval (default: 15.0), max_age (default: 60.0)
-            scheduler: Scheduler config options: timezone (default: timezone.utc)
+            scheduler: Scheduler config options: timezone (default: "UTC")
             stager: Stager config options: interval (default: 1.0), limit (default: 20_000)
         """
         queues = queues or {}

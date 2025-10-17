@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone, tzinfo
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from ._worker import worker_name
 
@@ -59,23 +60,38 @@ _NICKNAMES = {
 class ScheduledEntry:
     expression: Expression
     worker_cls: type
+    timezone: tzinfo | None = None
 
 
 _scheduled_entries: list[ScheduledEntry] = []
 
 
-def register_scheduled(expression: str, worker_cls: type) -> None:
+def register_scheduled(cron: str | dict, worker_cls: type) -> None:
     """Register a worker or job for periodic execution.
 
     Args:
-        expression: Cron expression string (e.g., "0 0 * * *" or "@daily")
+        cron: Either a cron expression string (e.g., "0 0 * * *" or "@daily")
+              or a dict with "expr" and optional "timezone" keys.
+              The "timezone" must be a string timezone name (e.g., "America/Chicago").
         worker_cls: The worker class to execute
 
     Raises:
         ValueError: If the cron expression is invalid
+
+    Examples:
+        >>> register_scheduled("0 0 * * *", MyWorker)
+        >>> register_scheduled({"expr": "@daily", "timezone": "America/Chicago"}, MyWorker)
     """
+    if isinstance(cron, str):
+        expression = cron
+        tz = None
+    else:
+        expression = cron.get("expr")
+        tz_name = cron.get("timezone")
+        tz = ZoneInfo(tz_name) if tz_name else None
+
     parsed = Expression.parse(expression)
-    entry = ScheduledEntry(expression=parsed, worker_cls=worker_cls)
+    entry = ScheduledEntry(expression=parsed, worker_cls=worker_cls, timezone=tz)
 
     _scheduled_entries.append(entry)
 
@@ -237,7 +253,7 @@ class Scheduler:
         >>> async with Oban(
         ...     conn=conn,
         ...     queues={"default": 10},
-        ...     scheduler={"timezone": timezone.utc}
+        ...     scheduler={"timezone": "America/Chicago"}
         ... ) as oban:
         ...     # Scheduler runs automatically in the background
     """
@@ -247,11 +263,11 @@ class Scheduler:
         *,
         leader: Leader,
         query: Query,
-        timezone: tzinfo = timezone.utc,
+        timezone: str = "UTC",
     ) -> None:
         self._leader = leader
         self._query = query
-        self._timezone = timezone
+        self._timezone = ZoneInfo(timezone)
 
         self._loop_task = None
 
@@ -277,15 +293,18 @@ class Scheduler:
                 break
 
     async def _evaluate(self) -> None:
-        now = datetime.now(self._timezone)
-
         jobs = [
             self._build_job(entry)
             for entry in _scheduled_entries
-            if entry.expression.is_now(now)
+            if self._is_now(entry)
         ]
 
         await self._query.enqueue_many(jobs)
+
+    def _is_now(self, entry: ScheduledEntry) -> bool:
+        now = datetime.now(entry.timezone or self._timezone)
+
+        return entry.expression.is_now(now)
 
     def _build_job(self, entry: ScheduledEntry) -> Job:
         work_name = worker_name(entry.worker_cls)
