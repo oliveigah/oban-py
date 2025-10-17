@@ -224,14 +224,23 @@ class TestSchedulerEvaluate:
             def __init__(self):
                 self.enqueued_jobs = []
 
-            async def enqueue_many(self, jobs):
+            async def insert_jobs(self, jobs):
                 self.enqueued_jobs.extend(jobs)
+                return jobs
 
         return MockQuery()
 
     @pytest.fixture
-    def scheduler(self, mock_query):
-        return Scheduler(leader=None, query=mock_query)
+    def mock_notifier(self):
+        class MockNotifier:
+            async def notify(self, channel, payload):
+                pass
+
+        return MockNotifier()
+
+    @pytest.fixture
+    def scheduler(self, mock_query, mock_notifier):
+        return Scheduler(leader=None, notifier=mock_notifier, query=mock_query)
 
     @pytest.mark.asyncio
     async def test_enqueues_jobs_for_matching_expressions(self, scheduler, mock_query):
@@ -293,12 +302,17 @@ class TestSchedulerEvaluate:
         assert "cron_name" in job.meta
 
     @pytest.mark.asyncio
-    async def test_uses_configured_timezone(self, mock_query):
+    async def test_uses_configured_timezone(self, mock_query, mock_notifier):
         chi_tz = ZoneInfo("America/Chicago")
         chi_now = datetime.now(chi_tz)
         utc_now = datetime.now(timezone.utc)
 
-        scheduler = Scheduler(leader=None, query=mock_query, timezone="America/Chicago")
+        scheduler = Scheduler(
+            leader=None,
+            notifier=mock_notifier,
+            query=mock_query,
+            timezone="America/Chicago",
+        )
 
         @worker(queue="chi", cron=f"* {chi_now.hour} * * *")
         class ChiWorker:
@@ -316,14 +330,17 @@ class TestSchedulerEvaluate:
         assert mock_query.enqueued_jobs[0].queue == "chi"
 
     @pytest.mark.asyncio
-    async def test_per_job_timezone_override(self, mock_query):
+    async def test_per_job_timezone_override(self, mock_query, mock_notifier):
         chi_tz = ZoneInfo("America/Chicago")
         los_tz = ZoneInfo("America/Los_Angeles")
         chi_now = datetime.now(chi_tz)
         los_now = datetime.now(los_tz)
 
         scheduler = Scheduler(
-            leader=None, query=mock_query, timezone="America/Los_Angeles"
+            leader=None,
+            notifier=mock_notifier,
+            query=mock_query,
+            timezone="America/Los_Angeles",
         )
 
         @worker(cron={"expr": f"* {chi_now.hour} * * *", "timezone": "America/Chicago"})
@@ -344,7 +361,7 @@ class TestSchedulerEvaluate:
 class TestSchedulerTimeToNextMinute:
     @pytest.fixture
     def cron(self):
-        return Scheduler(leader=None, query=None)
+        return Scheduler(leader=None, notifier=None, query=None)
 
     def time_to_next_minute(self, cron, *, hour=12, minute=34, second=0, microsecond=0):
         time = datetime.now(timezone.utc).replace(

@@ -110,6 +110,7 @@ class Oban:
 
         self._scheduler = Scheduler(
             leader=self._leader,
+            notifier=self._notifier,
             query=self._query,
             **scheduler,
         )

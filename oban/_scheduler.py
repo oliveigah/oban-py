@@ -12,6 +12,7 @@ from ._worker import worker_name
 if TYPE_CHECKING:
     from .job import Job
     from ._leader import Leader
+    from ._notifier import Notifier
     from ._query import Query
 
 _DOW_ALIASES = {
@@ -278,10 +279,12 @@ class Scheduler:
         self,
         *,
         leader: Leader,
+        notifier: Notifier,
         query: Query,
         timezone: str = "UTC",
     ) -> None:
         self._leader = leader
+        self._notifier = notifier
         self._query = query
         self._timezone = ZoneInfo(timezone)
 
@@ -315,7 +318,11 @@ class Scheduler:
             if self._is_now(entry)
         ]
 
-        await self._query.enqueue_many(jobs)
+        result = await self._query.insert_jobs(jobs)
+        queues = {job.queue for job in result}
+
+        for queue in queues:
+            await self._notifier.notify("insert", {"queue": queue})
 
     def _is_now(self, entry: ScheduledEntry) -> bool:
         now = datetime.now(entry.timezone or self._timezone)
