@@ -1,0 +1,104 @@
+import pytest
+
+from oban import job, worker
+from oban.testing import process_job
+
+
+@worker()
+class TestProcessJob:
+    def test_process_job_with_worker_new(self):
+        @worker()
+        class SampleWorker:
+            def process(self, job):
+                return job.args
+
+        result = process_job(SampleWorker.new({"user_id": 123}))
+
+        assert result["user_id"] == 123
+
+    def test_process_job_with_function_new(self):
+        @job()
+        def echo(email):
+            return email
+
+        result = process_job(echo.new("test@example.com"))
+
+        assert result == "test@example.com"
+
+    def test_process_job_with_attempt_number(self):
+        @worker()
+        class RetryAwareWorker:
+            def process(self, job):
+                if job.attempt < 3:
+                    raise ValueError("boom")
+                return {"success": True, "attempt": job.attempt}
+
+        job = RetryAwareWorker.new()
+        job.attempt = 3
+
+        result = process_job(job)
+
+        assert result["success"] is True
+        assert result["attempt"] == 3
+
+    def test_process_job_with_failing_worker(self):
+        @worker()
+        class FailingWorker:
+            def process(self, job):
+                raise ValueError("boom")
+
+        with pytest.raises(ValueError, match="boom"):
+            process_job(FailingWorker.new())
+
+    def test_process_job_sets_execution_defaults(self):
+        @worker()
+        class VerifyingWorker:
+            def process(self, job):
+                assert job.id is not None
+                assert job.attempt == 1
+                assert job.attempted_at is not None
+                assert job.scheduled_at is not None
+                assert job.inserted_at is not None
+
+        job = VerifyingWorker.new({"data": "test"})
+
+        assert job.id is None
+        assert job.attempt == 0
+        assert job.attempted_at is None
+        assert job.scheduled_at is None
+        assert job.inserted_at is None
+
+        process_job(job)
+
+    def test_process_job_preserves_explicit_values(self):
+        @worker()
+        class VerifyingWorker:
+            def process(self, job):
+                assert job.id == 999
+                assert job.attempt == 5
+
+        job = VerifyingWorker.new({}, attempt=5, id=999)
+
+        process_job(job)
+
+    def test_process_job_json_recodes_args_and_meta(self):
+        @worker()
+        class JsonTestWorker:
+            def process(self, job):
+                assert isinstance(job.args["value"], list)
+                assert job.args["value"] == [1, 2, 3]
+
+        job = JsonTestWorker.new({"value": (1, 2, 3)})
+
+        process_job(job)
+
+    def test_process_job_rejects_non_json_serializable(self):
+        @worker()
+        class BadWorker:
+            def process(self, job):
+                pass
+
+        job = BadWorker.new({"function": lambda x: x})
+
+        with pytest.raises(TypeError):
+            process_job(job)
