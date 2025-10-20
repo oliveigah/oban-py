@@ -58,6 +58,79 @@ def _get_mode() -> str | None:
     return _testing_mode.get()
 
 
+async def assert_enqueued(*, oban: str | Oban = "oban", **filters):
+    """Assert that a job matching the given criteria was enqueued.
+
+    This helper queries the database for jobs in 'available' or 'scheduled' state
+    that match the provided filters.
+
+    Args:
+        oban: Oban instance name (default: "oban") or Oban instance
+        **filters: Job fields to match (e.g., worker=EmailWorker, args={"to": "..."},
+                   queue="mailers", priority=5). Args supports partial matching.
+
+    Raises:
+        AssertionError: If no matching job is found
+
+    Example:
+        >>> from oban.testing import assert_enqueued
+        >>> from app.workers import EmailWorker
+        >>>
+        >>> # Assert job was enqueued with specific worker and args
+        >>> async def test_signup_sends_email(app):
+        ...     await app.post("/signup", json={"email": "user@example.com"})
+        ...     await assert_enqueued(worker=EmailWorker, args={"to": "user@example.com"})
+        >>>
+        >>> # Match on queue alone
+        >>> await assert_enqueued(queue="mailers")
+        >>>
+        >>> # Partial args matching
+        >>> await assert_enqueued(worker=EmailWorker, args={"to": "user@example.com"})
+        >>>
+        >>> # Filter by queue and priority
+        >>> await assert_enqueued(worker=EmailWorker, queue="mailers", priority=5)
+        >>>
+        >>> # Use an alternate oban instance
+        >>> await assert_enqueued(worker=BatchWorker, oban="batch")
+    """
+    if isinstance(oban, str):
+        oban_instance = get_instance(oban)
+    else:
+        oban_instance = oban
+
+    if "worker" in filters and not isinstance(filters["worker"], str):
+        filters["worker"] = worker_name(filters["worker"])
+
+    jobs = await oban_instance._query.all_jobs(["available", "scheduled"])
+
+    matching = [job for job in jobs if _match_filters(job, filters)]
+
+    if not matching:
+        # TODO: Improve the representation of jobs
+        raise AssertionError(
+            f"Expected a job matching: {filters} to be enqueued. Instead found:\n\n{jobs}"
+        )
+
+
+def _match_filters(job: Job, filters: dict) -> bool:
+    for key, value in filters.items():
+        if key == "args":
+            if not _args_match(value, job.args):
+                return False
+        elif getattr(job, key, None) != value:
+            return False
+
+    return True
+
+
+def _args_match(expected: dict, actual: dict) -> bool:
+    for key, value in expected.items():
+        if key not in actual or actual[key] != value:
+            return False
+
+    return True
+
+
 def process_job(job: Job):
     """Execute a worker's process method with the given job.
 

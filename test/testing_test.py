@@ -122,3 +122,33 @@ class TestInlineMode:
             assert executed.is_set()
             assert job.args["value"] == 42
             assert job.worker.endswith("InlineWorker")
+
+
+class TestAssertEnqueued:
+    @pytest.mark.oban(queues={})
+    async def test_assert_enqueued_with_worker(self, oban_instance):
+        @worker(queue="alpha")
+        class Alpha:
+            def process(self, job):
+                pass
+
+        @worker(queue="omega", max_attempts=5)
+        class Omega:
+            def process(self, job):
+                pass
+
+        with mode("manual"):
+            oban = oban_instance()
+            await oban.enqueue_many(
+                Alpha.new(),
+                Alpha.new({"id": 1, "xd": 1}),
+                Omega.new({"id": 1, "xd": 2}),
+            )
+
+            await assert_enqueued(worker=Alpha)
+            await assert_enqueued(worker=Alpha, queue="alpha")
+            await assert_enqueued(worker=Omega)
+            await assert_enqueued(worker=Omega, args={})
+            await assert_enqueued(worker=Omega, args={"id": 1})
+            await assert_enqueued(worker=Omega, args={"id": 1, "xd": 2})
+            await assert_enqueued(worker=Omega, oban="oban")

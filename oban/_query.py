@@ -49,6 +49,14 @@ class Query:
 
     # Jobs
 
+    async def all_jobs(self, states: list[str]) -> list[Job]:
+        async with self._driver.connection() as conn:
+            stmt = load_file("all_jobs.sql", self._prefix)
+
+            async with conn.cursor(row_factory=class_row(Job)) as cur:
+                await cur.execute(stmt, {"states": states})
+                return await cur.fetchall()
+
     async def cancel_job(self, job: Job, reason: str) -> None:
         async with self._driver.connection() as conn:
             stmt = load_file("cancel_job.sql", self._prefix)
