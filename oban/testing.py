@@ -58,6 +58,39 @@ def _get_mode() -> str | None:
     return _testing_mode.get()
 
 
+async def reset_oban(oban: str | Oban = "oban"):
+    """Reset Oban tables between tests.
+
+    Truncates all oban related tables with CASCADE and RESTART IDENTITY. Useful
+    for cleaning up between tests when using manual testing mode.
+
+    Args:
+        oban: Oban instance name (default: "oban") or Oban instance
+
+    Example:
+        >>> from oban.testing import reset_oban
+        >>> import pytest
+        >>>
+        >>> # In your conftest.py
+        >>> @pytest.fixture(autouse=True)
+        >>> async def _reset_oban_after_test():
+        ...     yield
+        ...     await reset_oban()
+        >>>
+        >>> # Or call directly in tests
+        >>> async def test_something(oban):
+        ...     await oban.enqueue(SomeWorker.new({}))
+        ...     # ... test assertions ...
+        ...     await reset_oban()
+    """
+    if isinstance(oban, str):
+        oban_instance = get_instance(oban)
+    else:
+        oban_instance = oban
+
+    await oban_instance._query.reset()
+
+
 async def assert_enqueued(*, oban: str | Oban = "oban", **filters):
     """Assert that a job matching the given criteria was enqueued.
 

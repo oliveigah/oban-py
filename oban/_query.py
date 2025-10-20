@@ -203,6 +203,12 @@ class Query:
 
             await conn.execute(stmt)
 
+    async def reset(self) -> None:
+        async with self._driver.connection() as conn:
+            stmt = load_file("reset.sql", self._prefix)
+
+            await conn.execute(stmt)
+
     async def uninstall(self) -> None:
         async with self._driver.connection() as conn:
             stmt = load_file("uninstall.sql", self._prefix)

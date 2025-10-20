@@ -8,6 +8,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from oban import Oban
 from oban.schema import install
+from oban.testing import reset_oban
 
 DB_URL_BASE = os.getenv("DB_URL_BASE", "postgresql://postgres@localhost")
 
@@ -44,30 +45,28 @@ async def test_database(request):
 
 
 @pytest_asyncio.fixture
-async def db_url(test_database):
-    yield test_database
-
-    with psycopg.connect(test_database, autocommit=True) as conn:
-        conn.execute("""
-            TRUNCATE TABLE oban_jobs, oban_leaders, oban_producers RESTART IDENTITY CASCADE
-         """)
-
-
-@pytest_asyncio.fixture
-async def oban_instance(request, db_url):
+async def oban_instance(request, test_database):
     mark = request.node.get_closest_marker("oban")
     mark_kwargs = mark.kwargs if mark else {}
 
-    pool = AsyncConnectionPool(conninfo=db_url, open=False)
+    pool = AsyncConnectionPool(conninfo=test_database, min_size=2, open=False)
 
     await pool.open()
     await pool.wait()
 
+    instances = []
+
     def _create_instance(**overrides):
         params = {"conn": pool, "leadership": False, "stager": {"interval": 0.01}}
+        oban = Oban(**{**params, **mark_kwargs, **overrides})
 
-        return Oban(**{**params, **mark_kwargs, **overrides})
+        instances.append(oban)
+
+        return oban
 
     yield _create_instance
+
+    for oban in instances:
+        await reset_oban(oban)
 
     await pool.close()
