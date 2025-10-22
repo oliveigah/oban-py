@@ -2,13 +2,21 @@ import asyncio
 import pytest
 
 from oban import job, worker
+from datetime import datetime, timedelta, timezone
+
 from oban.testing import (
     all_enqueued,
     assert_enqueued,
+    drain_queue,
     mode,
     process_job,
     refute_enqueued,
 )
+from oban.types import Cancel, Snooze
+
+
+def future(**kwargs):
+    return datetime.now(timezone.utc) + timedelta(**kwargs)
 
 
 @worker()
@@ -16,7 +24,7 @@ class TestProcessJob:
     def test_process_job_with_worker_new(self):
         @worker()
         class SampleWorker:
-            def process(self, job):
+            async def process(self, job):
                 return job.args
 
         result = process_job(SampleWorker.new({"user_id": 123}))
@@ -35,7 +43,7 @@ class TestProcessJob:
     def test_process_job_with_attempt_number(self):
         @worker()
         class RetryAwareWorker:
-            def process(self, job):
+            async def process(self, job):
                 if job.attempt < 3:
                     raise ValueError("boom")
                 return {"success": True, "attempt": job.attempt}
@@ -51,7 +59,7 @@ class TestProcessJob:
     def test_process_job_with_failing_worker(self):
         @worker()
         class FailingWorker:
-            def process(self, job):
+            async def process(self, job):
                 raise ValueError("boom")
 
         with pytest.raises(ValueError, match="boom"):
@@ -60,7 +68,7 @@ class TestProcessJob:
     def test_process_job_sets_execution_defaults(self):
         @worker()
         class VerifyingWorker:
-            def process(self, job):
+            async def process(self, job):
                 assert job.id is not None
                 assert job.attempt == 1
                 assert job.attempted_at is not None
@@ -80,7 +88,7 @@ class TestProcessJob:
     def test_process_job_preserves_explicit_values(self):
         @worker()
         class VerifyingWorker:
-            def process(self, job):
+            async def process(self, job):
                 assert job.id == 999
                 assert job.attempt == 5
 
@@ -91,7 +99,7 @@ class TestProcessJob:
     def test_process_job_json_recodes_args_and_meta(self):
         @worker()
         class JsonTestWorker:
-            def process(self, job):
+            async def process(self, job):
                 assert isinstance(job.args["value"], list)
                 assert job.args["value"] == [1, 2, 3]
 
@@ -102,7 +110,7 @@ class TestProcessJob:
     def test_process_job_rejects_non_json_serializable(self):
         @worker()
         class BadWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         job = BadWorker.new({"function": lambda x: x})
@@ -112,13 +120,12 @@ class TestProcessJob:
 
 
 class TestInlineMode:
-    @pytest.mark.oban(queues={})
     async def test_inline_mode_executes_immediately(self, oban_instance):
         executed = asyncio.Event()
 
         @worker()
         class InlineWorker:
-            def process(self, job):
+            async def process(self, job):
                 executed.set()
 
         with mode("inline"):
@@ -131,11 +138,10 @@ class TestInlineMode:
 
 
 class TestAllEnqueued:
-    @pytest.mark.oban(queues={})
     async def test_all_enqueued_with_no_filters(self, oban_instance):
         @worker(queue="alpha")
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -145,16 +151,15 @@ class TestAllEnqueued:
 
         assert len(jobs) == 2
 
-    @pytest.mark.oban(queues={})
     async def test_all_enqueued_with_worker_filter(self, oban_instance):
         @worker(queue="alpha")
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         @worker(queue="omega")
         class Omega:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -165,11 +170,10 @@ class TestAllEnqueued:
         assert len(jobs) == 2
         assert all(job.worker.endswith("Alpha") for job in jobs)
 
-    @pytest.mark.oban(queues={})
     async def test_all_enqueued_with_args_filter(self, oban_instance):
         @worker()
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -184,11 +188,10 @@ class TestAllEnqueued:
         assert len(jobs) == 2
         assert all(job.args["id"] == 1 for job in jobs)
 
-    @pytest.mark.oban(queues={})
     async def test_all_enqueued_returns_descending_order(self, oban_instance):
         @worker()
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -206,16 +209,15 @@ class TestAllEnqueued:
 
 
 class TestAssertEnqueued:
-    @pytest.mark.oban(queues={})
     async def test_assert_enqueued_with_worker(self, oban_instance):
         @worker(queue="alpha")
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         @worker(queue="omega", max_attempts=5)
         class Omega:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -233,11 +235,10 @@ class TestAssertEnqueued:
         await assert_enqueued(worker=Omega, args={"id": 1, "xd": 2})
         await assert_enqueued(worker=Omega, oban="oban")
 
-    @pytest.mark.oban(queues={})
     async def test_assert_enqueued_raises_on_no_match(self, oban_instance):
         @worker(queue="alpha")
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -252,11 +253,10 @@ class TestAssertEnqueued:
         assert "worker" in message
         assert "Job(id=1, worker=Alpha" in message
 
-    @pytest.mark.oban(queues={})
     async def test_assert_enqueued_with_timeout(self, oban_instance):
         @worker()
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -269,11 +269,10 @@ class TestAssertEnqueued:
 
         await assert_enqueued(worker=Alpha, timeout=0.05)
 
-    @pytest.mark.oban(queues={})
     async def test_assert_enqueued_timeout_expires(self, oban_instance):
         @worker()
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban_instance()
@@ -283,11 +282,10 @@ class TestAssertEnqueued:
 
 
 class TestRefuteEnqueued:
-    @pytest.mark.oban(queues={})
     async def test_refute_enqueued_passes_when_no_match(self, oban_instance):
         @worker(queue="alpha")
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -296,11 +294,10 @@ class TestRefuteEnqueued:
         await refute_enqueued(worker=Alpha, args={"id": 999})
         await refute_enqueued(queue="omega")
 
-    @pytest.mark.oban(queues={})
     async def test_refute_enqueued_raises_when_match_found(self, oban_instance):
         @worker(queue="alpha")
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -315,22 +312,20 @@ class TestRefuteEnqueued:
         assert "worker" in message
         assert "Job(id=1, worker=Alpha" in message
 
-    @pytest.mark.oban(queues={})
     async def test_refute_enqueued_with_timeout_passes(self, oban_instance):
         @worker()
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban_instance()
 
         await refute_enqueued(worker=Alpha, timeout=0.05)
 
-    @pytest.mark.oban(queues={})
     async def test_refute_enqueued_with_timeout_fails(self, oban_instance):
         @worker()
         class Alpha:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         oban = oban_instance()
@@ -343,3 +338,114 @@ class TestRefuteEnqueued:
 
         with pytest.raises(AssertionError, match="within 0.1s"):
             await refute_enqueued(worker=Alpha, timeout=0.1)
+
+
+class TestDrainQueue:
+    async def test_draining_available_and_scheduled_jobs(self, oban_instance):
+        @worker(queue="default")
+        class Simple:
+            async def process(self, job):
+                pass
+
+        await oban_instance().enqueue_many(
+            Simple.new(),
+            Simple.new(),
+            Simple.new(scheduled_at=future(hours=1)),
+        )
+
+        result = await drain_queue(queue="default")
+
+        assert result["completed"] == 3
+
+    async def test_draining_without_scheduled_jobs(self, oban_instance):
+        @worker(queue="default")
+        class Scheduled:
+            async def process(self, job):
+                pass
+
+        oban_instance()
+
+        await Scheduled.enqueue(scheduled_at=future(hours=1))
+
+        result = await drain_queue(queue="default", with_scheduled=False)
+
+        assert result["completed"] == 0
+
+    async def test_draining_with_safety_enabled(self, oban_instance):
+        @worker(queue="default", max_attempts=2)
+        class FailingWorker:
+            async def process(self, job):
+                raise ValueError("boom")
+
+        oban_instance()
+
+        await FailingWorker.enqueue()
+
+        result = await drain_queue(queue="default", with_safety=True)
+
+        assert result["retryable"] == 1
+
+    async def test_draining_without_safety_propagates_errors(self, oban_instance):
+        @worker(queue="default")
+        class FailingWorker:
+            async def process(self, job):
+                raise RuntimeError("test error")
+
+        oban_instance()
+
+        await FailingWorker.enqueue()
+
+        with pytest.raises(RuntimeError, match="test error"):
+            await drain_queue(queue="default", with_safety=False)
+
+    async def test_drain_queue_with_recursion(self, oban_instance):
+        @worker(queue="default")
+        class RecursiveWorker:
+            async def process(self, job):
+                depth = job.args["depth"]
+
+                if depth < 2:
+                    await RecursiveWorker.enqueue({"depth": depth + 1})
+
+        oban_instance()
+
+        await RecursiveWorker.enqueue({"depth": 0})
+
+        result = await drain_queue(queue="default", with_recursion=True)
+
+        assert result["completed"] == 3
+
+    async def test_draining_with_alternate_states(self, oban_instance):
+        @worker(queue="default")
+        class CancelWorker:
+            async def process(self, job):
+                return Cancel(reason="test cancel")
+
+        @worker(queue="default")
+        class SnoozeWorker:
+            async def process(self, job):
+                if job.meta.get("snoozed", 0) < 1:
+                    return Snooze(seconds=60)
+
+        oban = oban_instance()
+        await oban.enqueue_many(SnoozeWorker.new(), CancelWorker.new())
+
+        result = await drain_queue(queue="default", with_scheduled=False)
+
+        assert result["cancelled"] == 1
+        assert result["scheduled"] == 1
+        assert result["completed"] == 0
+
+    async def test_drain_queue_without_recursion(self, oban_instance):
+        @worker(queue="default")
+        class Simple:
+            async def process(self, job):
+                pass
+
+        await oban_instance().enqueue_many(Simple.new(), Simple.new())
+
+        result = await drain_queue(queue="default", with_recursion=False)
+
+        assert result["completed"] == 1
+
+        await assert_enqueued(queue="default")

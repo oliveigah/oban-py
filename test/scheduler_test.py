@@ -165,7 +165,7 @@ class TestScheduledRegistration:
     def test_worker_with_cron_registers_entry(self):
         @worker(queue="cleanup", cron="0 0 * * *")
         class CleanupWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         entry = _scheduled_entries[0]
@@ -187,7 +187,7 @@ class TestScheduledRegistration:
     def test_multiple_registrations(self):
         @worker(cron="0 0 * * *")
         class BusinessMan:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         @job(cron="@hourly")
@@ -199,7 +199,7 @@ class TestScheduledRegistration:
     def test_scheduled_entries_returns_copy(self):
         @worker(cron="@daily")
         class DailyWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         entries = scheduled_entries()
@@ -246,7 +246,7 @@ class TestSchedulerEvaluate:
     async def test_enqueues_jobs_for_matching_expressions(self, scheduler, mock_query):
         @worker(queue="minute", cron="* * * * *")
         class EveryMinuteWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         await scheduler._evaluate()
@@ -263,7 +263,7 @@ class TestSchedulerEvaluate:
     ):
         @worker(cron="0 0 1 1 *")
         class NewYearWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         await scheduler._evaluate()
@@ -275,7 +275,7 @@ class TestSchedulerEvaluate:
     async def test_enqueues_multiple_matching_jobs(self, scheduler, mock_query):
         @worker(queue="first", cron="* * * * *")
         class FirstWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         @job(queue="second", cron="* * * * *")
@@ -290,7 +290,7 @@ class TestSchedulerEvaluate:
     async def test_injects_cron_metadata(self, scheduler, mock_query):
         @worker(queue="meta", cron="* * * * *")
         class MetaWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         await scheduler._evaluate()
@@ -316,12 +316,12 @@ class TestSchedulerEvaluate:
 
         @worker(queue="chi", cron=f"* {chi_now.hour} * * *")
         class ChiWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         @worker(queue="utc", cron=f"* {utc_now.hour} * * *")
         class UtcWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         await scheduler._evaluate()
@@ -345,12 +345,12 @@ class TestSchedulerEvaluate:
 
         @worker(cron={"expr": f"* {chi_now.hour} * * *", "timezone": "America/Chicago"})
         class ChiWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         @worker(cron=f"* {los_now.hour} * * *")
         class LosWorker:
-            def process(self, job):
+            async def process(self, job):
                 pass
 
         await scheduler._evaluate()

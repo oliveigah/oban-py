@@ -9,7 +9,7 @@ from oban._worker import (
 
 
 class SampleWorker:
-    def process(self, job):
+    async def process(self, job):
         return job.args
 
 

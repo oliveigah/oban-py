@@ -4,6 +4,7 @@ import json
 import re
 from collections import defaultdict
 from dataclasses import replace
+from datetime import datetime
 from functools import cache
 from importlib.resources import files
 from typing import Any
@@ -155,11 +156,13 @@ class Query:
 
             await conn.execute(stmt, args)
 
-    async def stage_jobs(self, limit: int, queues: list[str]) -> list[str]:
+    async def stage_jobs(
+        self, limit: int, queues: list[str], before: datetime | None = None
+    ) -> list[str]:
         async with self._driver.connection() as conn:
             async with conn.transaction():
                 stmt = load_file("stage_jobs.sql", self._prefix)
-                args = {"limit": limit, "queues": queues}
+                args = {"limit": limit, "queues": queues, "before": before}
 
                 result = await conn.execute(stmt, args)
                 rows = await result.fetchall()

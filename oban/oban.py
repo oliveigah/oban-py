@@ -150,6 +150,9 @@ class Oban:
 
         return _get_mode()
 
+    def _connection(self):
+        return self._query._driver.connection()
+
     async def start(self) -> Oban:
         if self._producers:
             await self._verify_structure()
@@ -232,13 +235,9 @@ class Oban:
             >>>
             >>> await oban.enqueue_many(job1, job2, job3)
         """
-        # NOTE: This doesn't belong here in this form, but it will work until we have more `_job`
-        # methods (cancel_job, retry_job, etc) and need a different abstraction.
         if self.testing_mode == "inline":
-            from .testing import process_job
+            await self._execute_inline(jobs)
 
-            for job in jobs:
-                process_job(job)
             return list(jobs)
 
         result = await self._query.insert_jobs(list(jobs))
@@ -249,8 +248,16 @@ class Oban:
 
         return result
 
-    def _connection(self):
-        return self._query._driver.connection()
+    # NOTE: This doesn't belong here in this form, but it will work until we have more `_job`
+    # methods (cancel_job, retry_job, etc) and need a different abstraction.
+    async def _execute_inline(self, jobs):
+        from .testing import process_job
+
+        for job in jobs:
+            result = process_job(job)
+
+            if asyncio.iscoroutine(result):
+                await result
 
     async def _verify_structure(self) -> None:
         existing = await self._query.verify_structure()

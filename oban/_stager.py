@@ -76,7 +76,7 @@ class Stager:
         queue = payload["queue"]
 
         if queue in self._producers:
-            await self._producers[queue].notify()
+            self._producers[queue].notify()
 
     async def _stage(self) -> None:
         queues = list(self._producers.keys())

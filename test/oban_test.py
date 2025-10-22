@@ -1,5 +1,5 @@
+import asyncio
 import pytest
-import time
 from datetime import datetime, timedelta, timezone
 
 from .helpers import with_backoff
@@ -10,7 +10,7 @@ from oban import Cancel, Snooze, worker
 class Worker:
     processed = set()
 
-    def process(self, job):
+    async def process(self, job):
         Worker.processed.add(job.args["ref"])
 
         match job.args:
@@ -21,7 +21,7 @@ class Worker:
             case {"act": "sn"}:
                 return Snooze(1)
             case {"act": "sl"}:
-                time.sleep(job.args["sleep"])
+                await asyncio.sleep(job.args["sleep"])
 
                 return None
             case _:

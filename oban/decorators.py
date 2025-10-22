@@ -42,7 +42,7 @@ def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
         >>>
         >>> @worker(queue="mailers", priority=1)
         ... class EmailWorker:
-        ...     def process(self, job):
+        ...     async def process(self, job):
         ...         print(f"Sending email: {job.args}")
         ...         return None
         >>>
@@ -61,14 +61,14 @@ def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
         >>> # Periodic worker that runs daily at midnight
         >>> @worker(queue="cleanup", cron="@daily")
         ... class DailyCleanup:
-        ...     def process(self, job):
+        ...     async def process(self, job):
         ...         print("Running daily cleanup")
         ...         return None
         >>>
         >>> # Periodic worker with timezone
         >>> @worker(queue="reports", cron={"expr": "0 9 * * MON-FRI", "timezone": "America/New_York"})
         ... class BusinessHoursReport:
-        ...     def process(self, job):
+        ...     async def process(self, job):
         ...         print("Running during NY business hours")
         ...         return None
         >>>
@@ -78,7 +78,7 @@ def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
         >>> # Custom backoff for retries
         >>> @worker(queue="default")
         ... class CustomBackoffWorker:
-        ...     def process(self, job):
+        ...     async def process(self, job):
         ...         return None
         ...
         ...     def backoff(self, job):
@@ -96,7 +96,7 @@ def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
     def decorate(cls: type) -> type:
         if not hasattr(cls, "process"):
 
-            def process(self, job: Job) -> Result[Any]:
+            async def process(self, job: Job) -> Result[Any]:
                 raise NotImplementedError("Worker must implement process method")
 
             setattr(cls, "process", process)
@@ -108,7 +108,7 @@ def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
             return Job.new(worker=worker_name(cls), args=args or {}, **params)
 
         @classmethod
-        async def enqueue(cls, args: dict[str, Any], /, **overrides) -> Job:
+        async def enqueue(cls, args: dict[str, Any] = None, /, **overrides) -> Job:
             from .oban import get_instance
 
             job = cls.new(args, **overrides)
@@ -165,7 +165,7 @@ def job(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
         sig = inspect.signature(func)
 
         class FunctionWorker:
-            def process(self, job: Job):
+            async def process(self, job: Job):
                 return func(**job.args)
 
         FunctionWorker.__name__ = func.__name__

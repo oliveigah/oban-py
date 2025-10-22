@@ -9,7 +9,7 @@ def some_work(foo, bar):
 
 @worker(priority=2, queue="mailers")
 class MailWorker:
-    def process(job):
+    async def process(job):
         ...
 
 # myapp/oban.py

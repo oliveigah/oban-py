@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from ._backoff import jittery_clamped
-from ._worker import resolve_worker
+from ._executor import Executor
 from .job import Job
-from .types import Cancel, Snooze
 
 if TYPE_CHECKING:
     from ._query import Query
@@ -32,6 +30,7 @@ class Producer:
         self._query = query
         self._queue = queue
 
+        self._executor = Executor(query, safe=True)
         self._last_fetch_time = 0.0
         self._loop_task = None
         self._notified = asyncio.Event()
@@ -117,26 +116,4 @@ class Producer:
         )
 
     async def _execute(self, job: Job) -> None:
-        worker = resolve_worker(job.worker)()
-
-        try:
-            result = await asyncio.to_thread(worker.process, job)
-        except Exception as error:
-            result = error
-
-        match result:
-            case Exception() as error:
-                backoff = self._backoff(worker, job)
-                await self._query.error_job(job, error, backoff)
-            case Snooze(seconds=seconds):
-                await self._query.snooze_job(job, seconds)
-            case Cancel(reason=reason):
-                await self._query.cancel_job(job, reason)
-            case _:
-                await self._query.complete_job(job)
-
-    def _backoff(self, worker: Any, job: Job) -> int:
-        if hasattr(worker, "backoff"):
-            return worker.backoff(job)
-        else:
-            return jittery_clamped(job.attempt, job.max_attempts)
+        await self._executor.execute(job)

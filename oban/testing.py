@@ -10,9 +10,10 @@ import json
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
+from ._executor import Executor
 from .job import Job
 from .oban import get_instance
 from ._worker import resolve_worker, worker_name
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
     from .oban import Oban
 
 _testing_mode: ContextVar[str | None] = ContextVar("oban_testing_mode", default=None)
+
+_FAR_FUTURE = timedelta(365 * 100)
 
 
 @contextmanager
@@ -85,11 +88,9 @@ async def reset_oban(oban: str | Oban = "oban"):
         ...     await reset_oban()
     """
     if isinstance(oban, str):
-        oban_instance = get_instance(oban)
-    else:
-        oban_instance = oban
+        oban = get_instance(oban)
 
-    await oban_instance._query.reset()
+    await oban._query.reset()
 
 
 async def all_enqueued(*, oban: str | Oban = "oban", **filters) -> list[Job]:
@@ -124,14 +125,12 @@ async def all_enqueued(*, oban: str | Oban = "oban", **filters) -> list[Job]:
         >>> assert await all_enqueued() == []
     """
     if isinstance(oban, str):
-        oban_instance = get_instance(oban)
-    else:
-        oban_instance = oban
+        oban = get_instance(oban)
 
     if "worker" in filters and not isinstance(filters["worker"], str):
         filters["worker"] = worker_name(filters["worker"])
 
-    jobs = await oban_instance._query.all_jobs(["available", "scheduled"])
+    jobs = await oban._query.all_jobs(["available", "scheduled"])
 
     return [job for job in jobs if _match_filters(job, filters)]
 
@@ -261,6 +260,91 @@ async def refute_enqueued(*, oban: str | Oban = "oban", timeout: float = 0, **fi
         )
 
 
+async def drain_queue(
+    queue: str = "default",
+    oban: str | Oban = "oban",
+    with_recursion: bool = True,
+    with_safety: bool = False,
+    with_scheduled: bool = True,
+) -> dict[str, int]:
+    """Synchronously execute all available jobs in a queue.
+
+    All execution happens within the current process. Draining a queue from within
+    the current process is especially useful for testing, where jobs enqueued by a
+    process in sandbox mode are only visible to that process.
+
+    Args:
+        queue: Name of the queue to drain
+        oban: Oban instance name (default: "oban") or Oban instance
+        with_recursion: Whether to drain jobs recursively, or all in a single pass.
+                        Either way, jobs are processed sequentially, one at a time.
+                        Recursion is required when jobs insert other jobs or depend
+                        on the execution of other jobs. Defaults to True.
+        with_scheduled: Whether to include scheduled or retryable jobs when draining.
+                        In recursive mode, which is the default, this will include snoozed
+                        jobs, and may lead to an infinite loop if the job snoozes repeatedly.
+                        Defaults to True.
+        with_safety: Whether to silently catch and record errors when draining. When
+                     False, raised exceptions are immediately propagated to the caller.
+                     Defaults to False.
+
+    Returns:
+        Dict with counts for each terminal job state (completed, discarded, cancelled,
+        scheduled, retryable)
+
+    Example:
+        >>> from oban.testing import drain_queue
+        >>> from oban import worker
+        >>>
+        >>> # Drain a queue with jobs
+        >>> result = await drain_queue(queue="default")
+        >>> # {'completed': 2, 'discarded': 1, 'cancelled': 0, ...}
+        >>>
+        >>> # Drain without scheduled jobs
+        >>> await drain_queue(queue="default", with_scheduled=False)
+        >>>
+        >>> # Drain without safety and assert an error is raised
+        >>> import pytest
+        >>> with pytest.raises(RuntimeError):
+        ...     await drain_queue(queue="risky", with_safety=False)
+        >>>
+        >>> # Drain without recursion (jobs that enqueue other jobs)
+        >>> await drain_queue(queue="default", with_recursion=False)
+    """
+    if isinstance(oban, str):
+        oban = get_instance(oban)
+
+    summary = {
+        "cancelled": 0,
+        "completed": 0,
+        "discarded": 0,
+        "retryable": 0,
+        "scheduled": 0,
+    }
+
+    # TODO: This is at the wrong level. We want to wrap the execution of a single job.
+    executor = Executor(oban._query, safe=with_safety)
+
+    while True:
+        if with_scheduled:
+            before = datetime.now(timezone.utc) + _FAR_FUTURE
+            await oban._query.stage_jobs(limit=1000, queues=[queue], before=before)
+
+        match await oban._query.fetch_jobs(
+            demand=1, queue=queue, node="drain", uuid="drain"
+        ):
+            case []:
+                break
+            case [job]:
+                state = await executor.execute(job)
+                summary[state] += 1
+
+        if not with_recursion:
+            break
+
+    return summary
+
+
 async def _poll_until(condition, timeout: float, interval: float = 0.01) -> bool:
     if timeout <= 0:
         return await condition()
@@ -299,7 +383,7 @@ def process_job(job: Job):
         >>>
         >>> @worker()
         ... class EmailWorker:
-        ...     def process(self, job):
+        ...     async def process(self, job):
         ...         return {"sent": True, "to": job.args["to"]}
         >>>
         >>> def test_email_worker():
@@ -343,5 +427,13 @@ def process_job(job: Job):
         job.inserted_at = now
 
     worker_cls = resolve_worker(job.worker)
+    result = worker_cls().process(job)
 
-    return worker_cls().process(job)
+    if asyncio.iscoroutine(result):
+        try:
+            asyncio.get_running_loop()
+            return result
+        except RuntimeError:
+            return asyncio.run(result)
+    else:
+        return result
