@@ -481,6 +481,33 @@ class Oban:
                 },
             )
 
+    async def stop_queue(self, queue: str, *, node: str | None = None) -> None:
+        """Stop a supervised queue.
+
+        By default, this stops the queue across all connected nodes.
+
+        Args:
+            queue: The name of the queue to stop
+            node: Specific node name to stop the queue on. If not provided, stops across all nodes.
+
+        Example:
+            Stop the priority queue across all nodes:
+
+            >>> await oban.stop_queue("priority")
+
+            Stop the media queue on a particular node:
+
+            >>> await oban.stop_queue("media", node="worker.1")
+        """
+        if not node or node == self._node:
+            await self._stop_queue_local(queue)
+        else:
+            ident = self._scope_signal(node)
+
+            await self._notifier.notify(
+                "signal", {"action": "stop", "queue": queue, "ident": ident}
+            )
+
     def _scope_signal(self, node: str | None) -> str:
         if node is not None:
             return f"{self._name}.{node}"
@@ -493,8 +520,11 @@ class Oban:
         if ident != "any" and ident != f"{self._name}.{self._node}":
             return
 
-        if payload.pop("action") == "start":
-            await self._start_queue_local(**payload)
+        match payload.pop("action"):
+            case "start":
+                await self._start_queue_local(**payload)
+            case "stop":
+                await self._stop_queue_local(**payload)
 
     async def _start_queue_local(self, **params) -> None:
         queue = params["queue"]
@@ -513,6 +543,12 @@ class Oban:
         self._producers[queue] = producer
 
         await producer.start()
+
+    async def _stop_queue_local(self, queue: str) -> None:
+        producer = self._producers.pop(queue, None)
+
+        if producer:
+            await producer.stop()
 
 
 def get_instance(name: str = "oban") -> Oban:

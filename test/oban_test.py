@@ -435,3 +435,61 @@ class TestStartQueue:
         async with oban_instance() as oban:
             with pytest.raises(ValueError, match="limit must be positive"):
                 await oban.start_queue(queue="bad", limit=0)
+
+    async def test_starting_queue_that_already_exists(self, oban_instance):
+        async with oban_instance() as oban:
+            await oban.start_queue(queue="priority", limit=5)
+
+            state_1 = oban.check_queue("priority")
+
+            # Starting again should be idempotent (no-op)
+            await oban.start_queue(queue="priority", limit=10)
+
+            state_2 = oban.check_queue("priority")
+
+            # Limit should remain unchanged
+            assert state_1.limit == state_2.limit == 5
+
+
+class TestStopQueue:
+    @pytest.mark.oban(queues={"alpha": 1})
+    async def test_stopping_queue_with_node(self, oban_instance):
+        oban_1 = oban_instance(node="node.1")
+        oban_2 = oban_instance(node="node.2")
+
+        await oban_1.start()
+        await oban_2.start()
+
+        try:
+            assert oban_1.check_queue("alpha") is not None
+            assert oban_2.check_queue("alpha") is not None
+
+            await oban_1.stop_queue("alpha", node="node.1")
+
+            await with_backoff(lambda: oban_1.check_queue("alpha") is None)
+
+            assert oban_1.check_queue("alpha") is None
+            assert oban_2.check_queue("alpha") is not None
+        finally:
+            await oban_1.stop()
+            await oban_2.stop()
+
+    @pytest.mark.oban(queues={"alpha": 1})
+    async def test_stopping_queue_across_all_nodes(self, oban_instance):
+        oban_1 = oban_instance(node="node.1")
+        oban_2 = oban_instance(node="node.2")
+
+        await oban_1.start()
+        await oban_2.start()
+
+        try:
+            assert oban_1.check_queue("alpha") is not None
+            assert oban_2.check_queue("alpha") is not None
+
+            await oban_1.stop_queue("alpha")
+
+            await with_backoff(lambda: oban_1.check_queue("alpha") is None)
+            await with_backoff(lambda: oban_2.check_queue("alpha") is None)
+        finally:
+            await oban_1.stop()
+            await oban_2.stop()
