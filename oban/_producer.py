@@ -101,6 +101,17 @@ class Producer:
 
         self.notify()
 
+    async def scale(self, limit: int) -> None:
+        # TODO: Extract this into a _validate method
+        if limit < 1:
+            raise ValueError(f"Queue '{self._queue}' limit must be positive")
+
+        self._limit = limit
+
+        await self._query.update_producer(uuid=self._uuid, meta={"local_limit": limit})
+
+        self.notify()
+
     def check(self) -> QueueInfo:
         """Get the current state of this producer.
 

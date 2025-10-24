@@ -493,3 +493,41 @@ class TestStopQueue:
         finally:
             await oban_1.stop()
             await oban_2.stop()
+
+
+class TestScaleQueue:
+    @pytest.mark.oban(queues={"alpha": 5})
+    async def test_scaling_queue_with_node(self, oban_instance):
+        oban_1 = oban_instance(node="node.1")
+        oban_2 = oban_instance(node="node.2")
+
+        await oban_1.start()
+        await oban_2.start()
+
+        try:
+            await oban_1.scale_queue(queue="alpha", limit=10, node="node.1")
+
+            await with_backoff(lambda: oban_1.check_queue("alpha").limit == 10)
+
+            assert oban_1.check_queue("alpha").limit == 10
+            assert oban_2.check_queue("alpha").limit == 5
+        finally:
+            await oban_1.stop()
+            await oban_2.stop()
+
+    @pytest.mark.oban(queues={"alpha": 5})
+    async def test_scaling_queue_across_all_nodes(self, oban_instance):
+        oban_1 = oban_instance(node="node.1")
+        oban_2 = oban_instance(node="node.2")
+
+        await oban_1.start()
+        await oban_2.start()
+
+        try:
+            await oban_1.scale_queue(queue="alpha", limit=20)
+
+            await with_backoff(lambda: oban_1.check_queue("alpha").limit == 20)
+            await with_backoff(lambda: oban_2.check_queue("alpha").limit == 20)
+        finally:
+            await oban_1.stop()
+            await oban_2.stop()

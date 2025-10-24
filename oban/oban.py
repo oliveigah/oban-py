@@ -481,6 +481,24 @@ class Oban:
                 },
             )
 
+    async def _start_queue_local(self, **params) -> None:
+        queue = params["queue"]
+
+        if queue in self._producers:
+            return
+
+        producer = Producer(
+            query=self._query,
+            name=self._name,
+            node=self._node,
+            notifier=self._notifier,
+            **params,
+        )
+
+        self._producers[queue] = producer
+
+        await producer.start()
+
     async def stop_queue(self, queue: str, *, node: str | None = None) -> None:
         """Stop a supervised queue.
 
@@ -508,6 +526,54 @@ class Oban:
                 "signal", {"action": "stop", "queue": queue, "ident": ident}
             )
 
+    async def _stop_queue_local(self, queue: str) -> None:
+        producer = self._producers.pop(queue, None)
+
+        if producer:
+            await producer.stop()
+
+    async def scale_queue(
+        self, *, queue: str, limit: int, node: str | None = None
+    ) -> None:
+        """Scale the concurrency for a queue.
+
+        By default, this scales the queue across all connected nodes.
+
+        Args:
+            queue: The name of the queue to scale
+            limit: The new concurrency limit
+            node: Specific node name to scale the queue on. If not provided, scales across all nodes.
+
+        Example:
+            Scale a queue up, triggering immediate execution of queued jobs:
+
+            >>> await oban.scale_queue(queue="default", limit=50)
+
+            Scale the queue back down, allowing executing jobs to finish:
+
+            >>> await oban.scale_queue(queue="default", limit=5)
+
+            Scale the queue on a particular node:
+
+            >>> await oban.scale_queue(queue="default", limit=10, node="worker.1")
+        """
+        if not node or node == self._node:
+            await self._scale_queue_local(queue, limit)
+
+        if node != self._node:
+            ident = self._scope_signal(node)
+
+            await self._notifier.notify(
+                "signal",
+                {"action": "scale", "queue": queue, "limit": limit, "ident": ident},
+            )
+
+    async def _scale_queue_local(self, queue: str, limit: int) -> None:
+        producer = self._producers.get(queue)
+
+        if producer:
+            await producer.scale(limit)
+
     def _scope_signal(self, node: str | None) -> str:
         if node is not None:
             return f"{self._name}.{node}"
@@ -525,30 +591,8 @@ class Oban:
                 await self._start_queue_local(**payload)
             case "stop":
                 await self._stop_queue_local(**payload)
-
-    async def _start_queue_local(self, **params) -> None:
-        queue = params["queue"]
-
-        if queue in self._producers:
-            return
-
-        producer = Producer(
-            query=self._query,
-            name=self._name,
-            node=self._node,
-            notifier=self._notifier,
-            **params,
-        )
-
-        self._producers[queue] = producer
-
-        await producer.start()
-
-    async def _stop_queue_local(self, queue: str) -> None:
-        producer = self._producers.pop(queue, None)
-
-        if producer:
-            await producer.stop()
+            case "scale":
+                await self._scale_queue_local(**payload)
 
 
 def get_instance(name: str = "oban") -> Oban:
