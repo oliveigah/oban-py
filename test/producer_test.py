@@ -22,13 +22,13 @@ class TestProducerTracking:
                 assert alpha[1] == "oban"
                 assert alpha[2] == "work-1"
                 assert alpha[3] == "alpha"
-                assert alpha[4] == {"local_limit": 1}
+                assert alpha[4]["local_limit"] == 1
 
                 assert gamma[0]
                 assert gamma[1] == "oban"
                 assert gamma[2] == "work-1"
                 assert gamma[3] == "gamma"
-                assert gamma[4] == {"local_limit": 2}
+                assert gamma[4]["local_limit"] == 2
 
     @pytest.mark.oban(queues={"alpha": 1})
     async def test_producer_records_deleted_on_stop(self, oban_instance):

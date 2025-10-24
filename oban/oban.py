@@ -6,7 +6,7 @@ import socket
 from typing import Any
 
 from .job import Job
-from .types import QueueState
+from .types import QueueInfo
 from ._leader import Leader
 from ._lifeline import Lifeline
 from ._notifier import Notifier, PostgresNotifier
@@ -440,7 +440,7 @@ class Oban:
                 "signal", {"action": "resume", "queue": "*", "ident": ident}
             )
 
-    def check_queue(self, queue: str) -> QueueState | None:
+    def check_queue(self, queue: str) -> QueueInfo | None:
         """Check the current state of a queue.
 
         This allows you to introspect on a queue's health by retrieving key attributes
@@ -451,7 +451,7 @@ class Oban:
             queue: The name of the queue to check
 
         Returns:
-            A QueueState instance with the producer's state, or None if the queue
+            A QueueInfo instance with the producer's state, or None if the queue
             isn't running on this node.
 
         Example:
@@ -469,6 +469,22 @@ class Oban:
 
         if producer:
             return producer.check()
+
+    def check_all_queues(self) -> list[QueueInfo]:
+        """Check the current state of all queues running on this node.
+
+        Returns:
+            A list of QueueInfo instances, one for each queue running locally.
+            Returns an empty list if no queues are running on this node.
+
+        Example:
+            Get details about all local queues:
+
+            >>> states = oban.check_all_queues()
+            >>> for state in states:
+            ...     print(f"{state.queue}: {len(state.running)} running, paused={state.paused}")
+        """
+        return [producer.check() for producer in self._producers.values()]
 
     def _scope_signal(self, node: str | None) -> str:
         if node is not None:

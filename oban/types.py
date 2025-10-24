@@ -40,8 +40,8 @@ class Cancel:
 
 
 @dataclass(frozen=True, slots=True)
-class QueueState:
-    """Represents the runtime state of a queue.
+class QueueInfo:
+    """Information about a queue's runtime state.
 
     Attributes:
         limit: The concurrency limit for this queue

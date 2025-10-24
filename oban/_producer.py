@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from ._executor import Executor
 from .job import Job
-from .types import QueueState
+from .types import QueueInfo
 
 if TYPE_CHECKING:
     from ._notifier import Notifier
@@ -91,8 +91,12 @@ class Producer:
 
         self.notify()
 
-    def check(self) -> QueueState:
-        return QueueState(
+    def check(self) -> QueueInfo:
+        """Get the current state of this producer.
+
+        Returns a QueueInfo with the producer's configuration and runtime state.
+        """
+        return QueueInfo(
             limit=self._limit,
             node=self._node,
             paused=self._paused,
@@ -129,7 +133,9 @@ class Producer:
 
                 for job in jobs:
                     task = asyncio.create_task(self._execute(job))
-                    task.add_done_callback(lambda _, job_id=job.id: self._on_job_complete(job_id))
+                    task.add_done_callback(
+                        lambda _, job_id=job.id: self._on_job_complete(job_id)
+                    )
 
                     self._running_jobs[job.id] = task
 
