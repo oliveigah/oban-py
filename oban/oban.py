@@ -393,6 +393,7 @@ class Oban:
             >>> await oban.cancel_job(job)
         """
         job_id = job.id if isinstance(job, Job) else job
+
         await self.cancel_all_jobs([job_id])
 
     async def cancel_all_jobs(self, jobs: list[Job | int]) -> int:
@@ -422,7 +423,14 @@ class Oban:
         """
         job_ids = [job.id if isinstance(job, Job) else job for job in jobs]
 
-        return await self._query.cancel_all_jobs(job_ids)
+        count, executing_ids = await self._query.cancel_all_jobs(job_ids)
+
+        if executing_ids:
+            payloads = [{"action": "pkill", "job_id": id} for id in executing_ids]
+
+            await self._notifier.notify("signal", payloads)
+
+        return count
 
     async def pause_queue(self, queue: str, *, node: str | None = None) -> None:
         """Pause a queue, preventing it from executing new jobs.

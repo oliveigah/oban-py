@@ -580,6 +580,31 @@ class TestCancelJob:
             assert job.state == "cancelled"
             assert job.cancelled_at is not None
 
+    @pytest.mark.oban(queues={"default": 1})
+    async def test_cancelling_executing_job_signals_cancellation(self, oban_instance):
+        async with oban_instance() as oban:
+            cancelled = asyncio.Event()
+
+            @worker()
+            class CancellableWorker:
+                async def process(self, job):
+                    for _ in range(1000):
+                        if job.cancelled():
+                            cancelled.set()
+
+                            return Cancel("Cancelled during execution")
+
+                        await asyncio.sleep(0.01)
+
+            job = await CancellableWorker.enqueue()
+
+            await with_backoff(lambda: assert_state(oban, job.id, "executing"))
+
+            await oban.cancel_job(job.id)
+
+            await with_backoff(lambda: cancelled.is_set())
+            await with_backoff(lambda: assert_state(oban, job.id, "cancelled"))
+
     async def test_cancelling_completed_job_is_ignored(self, oban_instance):
         async with oban_instance() as oban:
             job = await Worker.enqueue({"act": "ok", "ref": 1})

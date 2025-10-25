@@ -41,13 +41,13 @@ class Producer:
         self._queue = queue
 
         self._executor = Executor(query, safe=True)
+        self._init_lock = asyncio.Lock()
         self._last_fetch_time = 0.0
         self._listen_token = None
         self._loop_task = None
         self._notified = asyncio.Event()
         self._running_jobs = {}
         self._started_at = None
-        self._init_lock = asyncio.Lock()
         self._uuid = str(uuid4())
 
     async def start(self) -> None:
@@ -78,9 +78,11 @@ class Producer:
             if self._loop_task:
                 self._loop_task.cancel()
 
+                running_tasks = [task for (_job, task) in self._running_jobs.values()]
+
                 await asyncio.gather(
                     self._loop_task,
-                    *self._running_jobs.values(),
+                    *running_tasks,
                     return_exceptions=True,
                 )
 
@@ -158,7 +160,7 @@ class Producer:
                         lambda _, job_id=job.id: self._on_job_complete(job_id)
                     )
 
-                    self._running_jobs[job.id] = task
+                    self._running_jobs[job.id] = (job, task)
 
             except asyncio.CancelledError:
                 break
@@ -185,11 +187,13 @@ class Producer:
         )
 
     async def _execute(self, job: Job) -> None:
+        job._cancellation = asyncio.Event()
+
         await self._executor.execute(job)
 
     async def _on_signal(self, _channel: str, payload: dict) -> None:
-        ident = payload.get("ident")
-        queue = payload.get("queue")
+        ident = payload.get("ident", "any")
+        queue = payload.get("queue", "*")
 
         if queue != "*" and queue != self._queue:
             return
@@ -202,3 +206,12 @@ class Producer:
                 await self.pause()
             case "resume":
                 await self.resume()
+            case "pkill":
+                job_id = payload["job_id"]
+
+                print("HERE")
+
+                if job_id in self._running_jobs:
+                    (job, _task) = self._running_jobs[job_id]
+
+                    job._cancellation.set()

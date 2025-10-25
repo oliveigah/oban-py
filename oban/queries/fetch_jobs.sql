@@ -13,15 +13,15 @@ WITH locked_jobs AS (
   FOR UPDATE SKIP LOCKED
 )
 UPDATE
-  oban_jobs
+  oban_jobs oj
 SET
-  attempt = oban_jobs.attempt + 1,
+  attempt = oj.attempt + 1,
   attempted_at = timezone('UTC', now()),
   attempted_by = %(attempted_by)s,
   state = 'executing'
 FROM
   locked_jobs
 WHERE
-  oban_jobs.id = locked_jobs.id
+  oj.id = locked_jobs.id
 RETURNING
-  oban_jobs.*
+  oj.*

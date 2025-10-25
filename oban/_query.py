@@ -169,15 +169,18 @@ class Query:
 
                 return result.rowcount
 
-    async def cancel_all_jobs(self, ids: list[int]) -> int:
+    async def cancel_all_jobs(self, ids: list[int]) -> tuple[int, list[int]]:
         async with self._driver.connection() as conn:
             async with conn.transaction():
                 stmt = load_file("cancel_all_jobs.sql", self._prefix)
                 args = {"ids": ids}
 
                 result = await conn.execute(stmt, args)
+                rows = await result.fetchall()
 
-                return result.rowcount
+                executing_ids = [row[0] for row in rows if row[1] == "executing"]
+
+                return len(rows), executing_ids
 
     async def snooze_job(self, job: Job, seconds: int) -> None:
         async with self._driver.connection() as conn:

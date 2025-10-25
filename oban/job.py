@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 from dataclasses import asdict, dataclass, field
@@ -38,6 +39,7 @@ class Job:
     completed_at: datetime | None = None
     discarded_at: datetime | None = None
     scheduled_at: datetime | None = None
+    _cancellation: asyncio.Event | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         # Timestamps returned from the database are naive, which prevents comparison against
@@ -139,6 +141,27 @@ class Job:
 
         if not (0 <= self.priority <= 9):
             raise ValueError("priority must be between 0 and 9")
+
+    def cancelled(self) -> bool:
+        """Check if cancellation has been requested for this job.
+
+        Workers can call this method at safe points during execution to check
+        if the job should stop processing and return early.
+
+        Returns:
+            True if cancellation has been requested, False otherwise
+
+        Example:
+            >>> async def process(self, job):
+            ...     for item in large_dataset:
+            ...         if job.cancelled():
+            ...             return Cancel("Job was cancelled")
+            ...         await process_item(item)
+        """
+        if self._cancellation is None:
+            return False
+
+        return self._cancellation.is_set()
 
     def to_dict(self) -> dict:
         data = asdict(self)
