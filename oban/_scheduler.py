@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
+from . import telemetry
 from ._worker import worker_name
 
 if TYPE_CHECKING:
@@ -312,16 +313,19 @@ class Scheduler:
                 break
 
     async def _evaluate(self) -> None:
-        jobs = [
-            self._build_job(entry)
-            for entry in _scheduled_entries
-            if self._is_now(entry)
-        ]
+        with telemetry.span("oban.scheduler.evaluate", {}) as context:
+            jobs = [
+                self._build_job(entry)
+                for entry in _scheduled_entries
+                if self._is_now(entry)
+            ]
 
-        result = await self._query.insert_jobs(jobs)
-        queues = {job.queue for job in result}
+            result = await self._query.insert_jobs(jobs)
+            queues = {job.queue for job in result}
 
-        await self._notifier.notify("insert", [{"queue": queue} for queue in queues])
+            context.add({"enqueued_count": len(result)})
+
+            await self._notifier.notify("insert", [{"queue": queue} for queue in queues])
 
     def _is_now(self, entry: ScheduledEntry) -> bool:
         now = datetime.now(entry.timezone or self._timezone)

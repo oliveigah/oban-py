@@ -164,9 +164,7 @@ class Producer:
 
             except asyncio.CancelledError:
                 break
-            except Exception as error:
-                # TODO: This needs some backoff
-                print(error)
+            except Exception:
                 pass
 
     async def _debounce_fetch(self) -> None:
@@ -217,8 +215,6 @@ class Producer:
                 await self.resume()
             case "pkill":
                 job_id = payload["job_id"]
-
-                print("HERE")
 
                 if job_id in self._running_jobs:
                     (job, _task) = self._running_jobs[job_id]

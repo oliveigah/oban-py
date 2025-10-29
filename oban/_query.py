@@ -191,7 +191,7 @@ class Query:
 
     async def stage_jobs(
         self, limit: int, queues: list[str], before: datetime | None = None
-    ) -> list[str]:
+    ) -> tuple[int, list[str]]:
         async with self._driver.connection() as conn:
             async with conn.transaction():
                 stmt = load_file("stage_jobs.sql", self._prefix)
@@ -199,8 +199,9 @@ class Query:
 
                 result = await conn.execute(stmt, args)
                 rows = await result.fetchall()
+                queues = [queue for (queue,) in rows]
 
-                return [queue for (queue,) in rows]
+                return (len(rows), queues)
 
     async def update_many_jobs(self, jobs: list[Job]) -> list[Job]:
         async with self._driver.connection() as conn:

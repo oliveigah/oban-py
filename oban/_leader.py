@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from . import telemetry
+
 if TYPE_CHECKING:
     from ._notifier import Notifier
     from ._query import Query
@@ -51,7 +53,7 @@ class Leader:
             return
 
         self._listen_token = await self._notifier.listen(
-            "leader", self._on_leader_notification, wait=False
+            "leader", self._on_notification, wait=False
         )
         self._loop_task = asyncio.create_task(self._loop(), name="oban-leader")
 
@@ -78,7 +80,7 @@ class Leader:
     async def _loop(self) -> None:
         while True:
             try:
-                await self._attempt_election()
+                await self._election()
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -93,10 +95,15 @@ class Leader:
 
             await asyncio.sleep(sleep_duration)
 
-    async def _attempt_election(self) -> None:
-        self._is_leader = await self._query.attempt_leadership(
-            self._name, self._node, int(self._interval), self._is_leader
-        )
+    async def _election(self) -> None:
+        meta = {"leader": self._is_leader}
 
-    async def _on_leader_notification(self, _channel: str, _payload: dict) -> None:
-        await self._attempt_election()
+        with telemetry.span("oban.leader.election", meta) as context:
+            self._is_leader = await self._query.attempt_leadership(
+                self._name, self._node, int(self._interval), self._is_leader
+            )
+
+            context.add({"leader": self._is_leader})
+
+    async def _on_notification(self, _channel: str, _payload: dict) -> None:
+        await self._election()

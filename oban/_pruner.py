@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from . import telemetry
+
 if TYPE_CHECKING:
     from ._leader import Leader
     from ._query import Query
@@ -63,4 +65,7 @@ class Pruner:
                 pass
 
     async def _prune(self) -> None:
-        await self._query.prune_jobs(self._max_age, self._limit)
+        with telemetry.span("oban.pruner.prune", {}) as context:
+            pruned = await self._query.prune_jobs(self._max_age, self._limit)
+
+            context.add({"pruned_count": pruned})

@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from . import telemetry
+
 if TYPE_CHECKING:
     from ._leader import Leader
     from ._notifier import Notifier
@@ -46,7 +48,7 @@ class Stager:
 
     async def start(self) -> None:
         self._listen_token = await self._notifier.listen(
-            "insert", self._on_insert_notification, wait=False
+            "insert", self._on_notification, wait=False
         )
         self._loop_task = asyncio.create_task(self._loop(), name="oban-stager")
 
@@ -72,14 +74,19 @@ class Stager:
 
             await asyncio.sleep(self._interval)
 
-    async def _on_insert_notification(self, channel: str, payload: dict) -> None:
+    async def _on_notification(self, channel: str, payload: dict) -> None:
         queue = payload["queue"]
 
         if queue in self._producers:
             self._producers[queue].notify()
 
     async def _stage(self) -> None:
-        queues = list(self._producers.keys())
+        with telemetry.span("oban.stager.stage", {}) as context:
+            queues = list(self._producers.keys())
 
-        for queue in await self._query.stage_jobs(self._limit, queues):
-            await self._producers[queue].notify()
+            (staged, active) = await self._query.stage_jobs(self._limit, queues)
+
+            context.add({"staged_count": staged, "available_queues": active})
+
+            for queue in active:
+                await self._producers[queue].notify()

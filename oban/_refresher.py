@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from . import telemetry
+
 if TYPE_CHECKING:
     from ._producer import Producer
     from ._leader import Leader
@@ -52,13 +54,21 @@ class Refresher:
                 pass
 
     async def _refresh(self) -> None:
-        uuids = [producer._uuid for producer in self._producers.values()]
+        with telemetry.span("oban.refresher.refresh", {}) as context:
+            uuids = [producer._uuid for producer in self._producers.values()]
 
-        if uuids:
-            await self._query.refresh_producers(uuids)
+            if uuids:
+                refreshed = await self._query.refresh_producers(uuids)
+            else:
+                refreshed = 0
+
+            context.add({"refreshed_count": refreshed})
 
     async def _cleanup(self) -> None:
         if not self._leader.is_leader:
             return
 
-        await self._query.cleanup_expired_producers(self._max_age)
+        with telemetry.span("oban.refresher.cleanup", {}) as context:
+            cleaned_up = await self._query.cleanup_expired_producers(self._max_age)
+
+            context.add({"cleanup_count": cleaned_up})

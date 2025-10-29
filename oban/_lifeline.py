@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from . import telemetry
+
 if TYPE_CHECKING:
     from ._leader import Leader
     from ._query import Query
@@ -37,7 +39,6 @@ class Lifeline:
     async def _loop(self) -> None:
         while True:
             try:
-                # Like the pruner, we sleep first before rescuing
                 await asyncio.sleep(self._interval)
 
                 await self._rescue()
@@ -50,4 +51,7 @@ class Lifeline:
         if not self._leader.is_leader:
             return
 
-        await self._query.rescue_jobs()
+        with telemetry.span("oban.lifeline.rescue", {}) as context:
+            rescued = await self._query.rescue_jobs()
+
+            context.add({"rescued_count": rescued})
