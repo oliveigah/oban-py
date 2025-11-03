@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from . import telemetry
 from ._executor import Executor
 from .job import Job
 from .types import QueueInfo
@@ -140,32 +141,31 @@ class Producer:
             self._notified.clear()
 
             try:
-                await self._debounce_fetch()
-
-                if self._paused:
-                    continue
-
-                demand = self._limit - len(self._running_jobs)
-
-                if demand <= 0:
-                    continue
-
-                jobs = await self._fetch_jobs(demand)
-
-                self._last_fetch_time = asyncio.get_event_loop().time()
-
-                for job in jobs:
-                    task = asyncio.create_task(self._execute(job))
-                    task.add_done_callback(
-                        lambda _, job_id=job.id: self._on_job_complete(job_id)
-                    )
-
-                    self._running_jobs[job.id] = (job, task)
-
+                await self._produce()
             except asyncio.CancelledError:
                 break
             except Exception:
                 pass
+
+    async def _produce(self) -> None:
+        await self._debounce_fetch()
+
+        demand = self._limit - len(self._running_jobs)
+
+        if self._paused or demand <= 0:
+            return
+
+        jobs = await self._fetch_jobs(demand)
+
+        self._last_fetch_time = asyncio.get_event_loop().time()
+
+        for job in jobs:
+            task = asyncio.create_task(self._execute(job))
+            task.add_done_callback(
+                lambda _, job_id=job.id: self._on_job_complete(job_id)
+            )
+
+            self._running_jobs[job.id] = (job, task)
 
     async def _debounce_fetch(self) -> None:
         elapsed = asyncio.get_event_loop().time() - self._last_fetch_time
@@ -173,23 +173,23 @@ class Producer:
         if elapsed < self._debounce_interval:
             await asyncio.sleep(self._debounce_interval - elapsed)
 
-    def _on_job_complete(self, job_id: int) -> None:
-        self._running_jobs.pop(job_id, None)
-
-        self.notify()
-
     async def _fetch_jobs(self, demand: int):
-        if self._pending_acks:
-            await self._query.ack_jobs(self._pending_acks)
+        with telemetry.span("oban.producer.fetch", {"queue": self._queue}) as context:
+            if self._pending_acks:
+                await self._query.ack_jobs(self._pending_acks)
 
-            self._pending_acks.clear()
+                self._pending_acks.clear()
 
-        return await self._query.fetch_jobs(
-            demand=demand,
-            queue=self._queue,
-            node=self._node,
-            uuid=self._uuid,
-        )
+            jobs = await self._query.fetch_jobs(
+                demand=demand,
+                queue=self._queue,
+                node=self._node,
+                uuid=self._uuid,
+            )
+
+            context.add({"fetched_count": len(jobs), "demand": demand})
+
+            return jobs
 
     async def _execute(self, job: Job) -> None:
         job._cancellation = asyncio.Event()
@@ -197,6 +197,11 @@ class Producer:
         executor = await Executor(job=job, safe=True).execute()
 
         self._pending_acks.append(executor.action)
+
+    def _on_job_complete(self, job_id: int) -> None:
+        self._running_jobs.pop(job_id, None)
+
+        self.notify()
 
     async def _on_signal(self, _channel: str, payload: dict) -> None:
         ident = payload.get("ident", "any")
