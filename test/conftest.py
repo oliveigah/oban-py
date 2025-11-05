@@ -38,8 +38,8 @@ async def test_database(request):
         if not exists:
             conn.execute(f'CREATE DATABASE "{dbname}"')
 
-            async with await psycopg.AsyncConnection.connect(db_url) as install_conn:
-                await install(install_conn)
+            async with await psycopg.AsyncConnection.connect(db_url) as conn:
+                await install(conn)
 
     yield db_url
 

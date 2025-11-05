@@ -12,10 +12,10 @@ import traceback
 from collections import defaultdict
 from contextlib import contextmanager
 from threading import RLock
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, List
 
-Handler = Callable[[str, Dict[str, Any]], None]
-Metadata = Dict[str, Any]
+Handler = Callable[[str, dict[str, Any]], None]
+Metadata = dict[str, Any]
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +31,9 @@ class Collector:
     """
 
     def __init__(self):
-        self._metadata: Dict[str, Any] = {}
+        self._metadata: dict[str, Any] = {}
 
-    def add(self, metadata: Dict[str, Any]) -> None:
+    def add(self, metadata: dict[str, Any]) -> None:
         """Add metadata to be included in the stop or exception event.
 
         Args:
@@ -41,7 +41,7 @@ class Collector:
         """
         self._metadata.update(metadata)
 
-    def get_all(self) -> Dict[str, Any]:
+    def get_all(self) -> dict[str, Any]:
         return self._metadata.copy()
 
 

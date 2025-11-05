@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, List
 
 from . import core
 
@@ -48,20 +48,20 @@ class _LoggerHandler:
         self.level = level
         self.logger = logger or logging.getLogger("oban")
 
-    def _handle_event(self, name: str, meta: Dict[str, Any]) -> None:
+    def _handle_event(self, name: str, meta: dict[str, Any]) -> None:
         data = self._format_event(name, meta)
         level = self._get_level(name)
         message = json.dumps(data)
 
         self.logger.log(level, message)
 
-    def _format_event(self, name: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_event(self, name: str, meta: dict[str, Any]) -> dict[str, Any]:
         if name.startswith("oban.job"):
             return self._format_job_event(name, meta)
         else:
             return self._format_loop_event(name, meta)
 
-    def _format_job_event(self, name: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_job_event(self, name: str, meta: dict[str, Any]) -> dict[str, Any]:
         job = meta.get("job")
 
         data = {field: getattr(job, field) for field in _JOB_FIELDS}
@@ -85,7 +85,7 @@ class _LoggerHandler:
 
         return data
 
-    def _format_loop_event(self, name: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_loop_event(self, name: str, meta: dict[str, Any]) -> dict[str, Any]:
         data = {key: val for key, val in meta.items() if key != "system_time"}
 
         data["duration"] = self._to_ms(data["duration"])
@@ -94,10 +94,13 @@ class _LoggerHandler:
         return data
 
     def _get_level(self, name: str) -> int:
+        # TODO: This is a mess.
         if name.endswith(".exception") and name != "oban.job.exception":
             return logging.ERROR
-
-        return self.level
+        elif name.startswith("oban.job"):
+            return self.level
+        else:
+            return logging.DEBUG
 
     def _to_ms(self, value: int) -> float:
         return round(value / 1_000_000, 2)

@@ -27,10 +27,10 @@ class Oban:
         conn: Any,
         leadership: bool | None = None,
         lifeline: dict[str, Any] = {},
-        name: str = "oban",
+        name: str | None = None,
         node: str | None = None,
         notifier: Notifier | None = None,
-        prefix: str = "public",
+        prefix: str | None = None,
         pruner: dict[str, Any] = {},
         queues: dict[str, int] | None = None,
         refresher: dict[str, Any] = {},
@@ -66,16 +66,19 @@ class Oban:
         if leadership is None:
             leadership = bool(queues)
 
-        self._name = name
+        self._name = name or "oban"
         self._node = node or socket.gethostname()
-        self._query = Query(conn, prefix)
+        self._prefix = prefix or "public"
+        self._query = Query(conn, self._prefix)
 
-        self._notifier = notifier or PostgresNotifier(query=self._query, prefix=prefix)
+        self._notifier = notifier or PostgresNotifier(
+            query=self._query, prefix=self._prefix
+        )
 
         self._producers = {
             queue: Producer(
                 query=self._query,
-                name=name,
+                name=self._name,
                 node=self._node,
                 notifier=self._notifier,
                 queue=queue,
@@ -87,7 +90,7 @@ class Oban:
         self._leader = Leader(
             query=self._query,
             node=self._node,
-            name=name,
+            name=self._name,
             enabled=leadership,
             notifier=self._notifier,
         )
@@ -119,7 +122,7 @@ class Oban:
 
         self._signal_token = None
 
-        _instances[name] = self
+        _instances[self._name] = self
 
     async def __aenter__(self) -> Oban:
         return await self.start()

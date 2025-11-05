@@ -10,10 +10,17 @@ dependencies = [
   "pydantic>=2.11.9",
   "pytest-asyncio>=1.2.0",
   "uvloop>=0.21.0",
+  "click>=8.1.0",
 ]
+
+[project.scripts]
+oban = "oban.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8.3.5", "ruff>=0.9.9"]
+
+[tool.uv]
+package = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
