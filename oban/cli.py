@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+import socket
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any, AsyncIterator
 import click
 from psycopg_pool import AsyncConnectionPool
 
+from oban import __version__
 from oban.config import Config
 from oban.schema import install as install_schema, uninstall as uninstall_schema
 from oban.telemetry import logger as telemetry_logger
@@ -27,6 +29,29 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("oban.cli")
+
+
+def print_banner(version: str) -> None:
+    banner = f"""
+  
+  [38;2;163;191;191m                 ██                                         
+  [38;2;153;183;183m                 ██                                         
+  [38;2;143;175;175m                 ██                                         
+  [38;2;133;167;167m      ███        ██   ███            ███   █    ██   ███    
+  [38;2;123;159;159m  ██████████     ███████████      ███████████   █████  ████ 
+  [38;2;113;151;151m ███       ███   ███       ███  ███       ███   ███      ███
+  [38;2;103;143;143m██           ██  ██         ██  ██         ██   ██        ██
+  [38;2;88;131;131m██           ██  ██         ██  ██         ██   ██        ██
+  [38;2;73;119;119m███         ███  ██         ██  ██         ██   ██        ██
+  [38;2;58;107;107m ███       ███   ████     ███    ███     ████   ██        ██
+  [38;2;43;101;101m   █████████     ██ ███████        ███████ ██   ██        ██
+  [0m
+
+  v{version} | [38;2;100;149;237mhttps://oban.pro[0m
+
+  Job orchestration framework for Python, backed by PostgreSQL
+"""
+    print(banner)
 
 
 @asynccontextmanager
@@ -216,6 +241,7 @@ def start(log_level: str, config: str | None, **params: Any) -> None:
     cli_conf = Config.from_cli(params)
 
     conf = tml_conf.merge(env_conf).merge(cli_conf)
+    node = conf.node or socket.gethostname()
 
     if not conf.database_url:
         raise click.UsageError(
@@ -223,11 +249,16 @@ def start(log_level: str, config: str | None, **params: Any) -> None:
         )
 
     async def run() -> None:
-        logger.info("Starting Oban...")
+        print_banner(__version__)
+
+        logger.info(f"Starting Oban v{__version__} on node {node}...")
 
         try:
             pool = await conf.create_pool()
-            logger.info("Connected to database")
+            logger.info(
+                f"Connected to {conf.database_url} "
+                f"(pool min: {conf.pool_min_size}, max: {conf.pool_max_size})"
+            )
         except Exception as error:
             logger.error(f"Failed to connect to database: {error!r}")
             sys.exit(1)
