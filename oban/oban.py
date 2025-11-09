@@ -195,6 +195,9 @@ class Oban:
         return self
 
     async def stop(self) -> None:
+        if not self._signal_token:
+            return
+
         await self._notifier.unlisten(self._signal_token)
 
         tasks = [
@@ -308,6 +311,9 @@ class Oban:
         """
         job_id = job.id if isinstance(job, Job) else job
 
+        if not job_id:
+            raise ValueError("Cannot retry a job that has not been enqueued")
+
         await self.retry_many_jobs([job_id])
 
     async def retry_many_jobs(self, jobs: list[Job | int]) -> int:
@@ -353,6 +359,9 @@ class Oban:
             >>> await oban.delete_job(job)
         """
         job_id = job.id if isinstance(job, Job) else job
+
+        if not job_id:
+            raise ValueError("Cannot delete a job that has not been enqueued")
 
         await self.delete_many_jobs([job_id])
 
@@ -409,6 +418,9 @@ class Oban:
             >>> await oban.cancel_job(job)
         """
         job_id = job.id if isinstance(job, Job) else job
+
+        if not job_id:
+            raise ValueError("Cannot cancel a job that has not been enqueued")
 
         await self.cancel_many_jobs([job_id])
 

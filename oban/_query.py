@@ -10,6 +10,7 @@ from importlib.resources import files
 from typing import Any
 
 from psycopg.rows import class_row
+from psycopg.types.json import Json
 
 from ._driver import wrap_conn
 from ._executor import AckAction
@@ -71,14 +72,22 @@ class Query:
 
     # Jobs
 
-    async def ack_jobs(self, acks: [AckAction]) -> None:
+    async def ack_jobs(self, acks: list[AckAction]) -> None:
+        def json_wrap(field, value) -> None | Json:
+            if field in ("error", "meta") and value is not None:
+                return Json(value)
+            else:
+                return value
+
         async with self._driver.connection() as conn:
             async with conn.transaction():
                 stmt = self._load_file("ack_jobs.sql", self._prefix)
-                args = {
-                    field: [getattr(ack, field) for ack in acks]
-                    for field in ACKABLE_FIELDS
-                }
+                args = {}
+
+                for field in ACKABLE_FIELDS:
+                    values = [json_wrap(field, getattr(ack, field)) for ack in acks]
+
+                    args[field] = values
 
                 await conn.execute(stmt, args)
 

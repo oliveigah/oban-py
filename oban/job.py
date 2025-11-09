@@ -23,7 +23,7 @@ TIMESTAMP_FIELDS = [
 class Job:
     worker: str
     id: int | None = None
-    state: JobState = "available"
+    state: JobState = JobState.AVAILABLE
     queue: str = "default"
     attempt: int = 0
     max_attempts: int = 20

@@ -104,7 +104,7 @@ def register_scheduled(cron: str | dict, worker_cls: type) -> None:
         expression = cron
         tz = None
     else:
-        expression = cron.get("expr")
+        expression = cron["expr"]
         tz_name = cron.get("timezone")
         tz = ZoneInfo(tz_name) if tz_name else None
 
@@ -295,6 +295,9 @@ class Scheduler:
         self._loop_task = asyncio.create_task(self._loop(), name="oban-cron")
 
     async def stop(self) -> None:
+        if not self._loop_task:
+            return
+
         self._loop_task.cancel()
 
         try:
@@ -339,7 +342,7 @@ class Scheduler:
         work_name = worker_name(entry.worker_cls)
         cron_name = str(hash((entry.expression.input, work_name)))
 
-        job = entry.worker_cls.new()
+        job = entry.worker_cls.new()  # type: ignore[attr-defined]
 
         job.meta = {
             "cron": True,

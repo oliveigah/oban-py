@@ -64,6 +64,9 @@ class Pruner:
         self._loop_task = asyncio.create_task(self._loop(), name="oban-pruner")
 
     async def stop(self) -> None:
+        if not self._loop_task:
+            return
+
         self._loop_task.cancel()
 
         try:

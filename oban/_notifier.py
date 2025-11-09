@@ -167,6 +167,9 @@ class PostgresNotifier:
         await self._connect()
 
     async def stop(self) -> None:
+        if not self._loop_task or not self._beat_task or not self._conn:
+            return
+
         self._loop_task.cancel()
         self._beat_task.cancel()
 
@@ -260,6 +263,9 @@ class PostgresNotifier:
                 break
 
     async def _process_pending(self) -> None:
+        if not self._conn:
+            return
+
         for channel in list(self._pending_listen):
             full_channel = self._to_full_channel(channel)
             await self._conn.execute(f'LISTEN "{full_channel}"')
@@ -277,6 +283,9 @@ class PostgresNotifier:
             self._pending_unlisten.discard(channel)
 
     async def _process_notifications(self) -> None:
+        if not self._conn:
+            return
+
         gen = self._conn.notifies(timeout=self._notify_timeout)
 
         async for notify in gen:

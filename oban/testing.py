@@ -21,7 +21,7 @@ from ._worker import worker_name
 if TYPE_CHECKING:
     from .oban import Oban
 
-_testing_mode: ContextVar[str | None] = ContextVar("oban_testing_mode", default=None)
+_testing_mode = ContextVar[str | None]("oban_testing_mode", default=None)
 
 _FAR_FUTURE = timedelta(365 * 100)
 
@@ -335,7 +335,8 @@ async def drain_queue(
             case [job]:
                 executor = await Executor(job=job, safe=with_safety).execute()
 
-                await oban._query.ack_jobs([executor.action])
+                if executor.action is not None:
+                    await oban._query.ack_jobs([executor.action])
 
                 summary[executor.status] += 1
 

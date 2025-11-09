@@ -103,4 +103,4 @@ class Stager:
             context.add({"staged_count": staged, "available_queues": active})
 
             for queue in active:
-                await self._producers[queue].notify()
+                self._producers[queue].notify()

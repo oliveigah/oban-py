@@ -81,10 +81,10 @@ class Config:
     @classmethod
     def from_toml(cls, path: str | None = None) -> Config:
         params = {}
-        path = Path(path or "oban.toml")
+        path_obj = Path(path or "oban.toml")
 
-        if path.exists():
-            with open(path, "rb") as file:
+        if path_obj.exists():
+            with open(path_obj, "rb") as file:
                 params = tomllib.load(file)
 
         return cls(**params)
@@ -116,6 +116,9 @@ class Config:
         return Config(**merged)
 
     async def create_pool(self) -> AsyncConnectionPool:
+        if not self.database_url:
+            raise ValueError("database_url is required to create a connection pool")
+
         pool = AsyncConnectionPool(
             conninfo=self.database_url,
             min_size=self.pool_min_size,
@@ -130,7 +133,7 @@ class Config:
     async def create_oban(self, pool: AsyncConnectionPool | None = None) -> Oban:
         pool = pool or await self.create_pool()
 
-        params = {
+        params: dict[str, Any] = {
             "conn": pool,
             "name": self.name,
             "prefix": self.prefix,

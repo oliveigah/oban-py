@@ -48,7 +48,7 @@ class QueueInfo:
     running: list[int]
     """List of currently executing job IDs"""
 
-    started_at: datetime
+    started_at: datetime | None
     """When the queue was started"""
 
 

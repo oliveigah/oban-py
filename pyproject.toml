@@ -17,7 +17,11 @@ dependencies = [
 oban = "oban.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.3.5", "ruff>=0.9.9"]
+dev = [
+    "pytest>=8.3.5",
+    "ruff>=0.9.9",
+    "ty>=0.0.1a25",
+]
 docs = [
   "sphinx>=8.0.0",
   "sphinx-book-theme>=1.1.0",
@@ -28,6 +32,9 @@ docs = [
 
 [tool.uv]
 package = true
+
+[tool.ty.src]
+exclude = ["test"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

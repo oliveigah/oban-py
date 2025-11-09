@@ -109,13 +109,15 @@ def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
             setattr(cls, "process", process)
 
         @classmethod
-        def new(cls, args: dict[str, Any] = None, /, **overrides) -> Job:
+        def new(cls, args: dict[str, Any] | None = None, /, **overrides) -> Job:
             params = {**cls._opts, **overrides}
 
             return Job.new(worker=worker_name(cls), args=args or {}, **params)
 
         @classmethod
-        async def enqueue(cls, args: dict[str, Any] = None, /, **overrides) -> Job:
+        async def enqueue(
+            cls, args: dict[str, Any] | None = None, /, **overrides
+        ) -> Job:
             from .oban import get_instance
 
             job = cls.new(args, **overrides)
@@ -168,16 +170,16 @@ def job(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
         ...     return {"status": "complete"}
     """
 
-    def decorate(func: Callable) -> type:
+    def decorate(func: Callable[..., Any]) -> type:
         sig = inspect.signature(func)
 
         class FunctionWorker:
             async def process(self, job: Job):
                 return func(**job.args)
 
-        FunctionWorker.__name__ = func.__name__
-        FunctionWorker.__module__ = func.__module__
-        FunctionWorker.__qualname__ = func.__qualname__
+        FunctionWorker.__name__ = func.__name__  # type: ignore[attr-defined]
+        FunctionWorker.__module__ = func.__module__  # type: ignore[attr-defined]
+        FunctionWorker.__qualname__ = func.__qualname__  # type: ignore[attr-defined]
         FunctionWorker.__doc__ = func.__doc__
 
         worker_cls = worker(oban=oban, cron=cron, **overrides)(FunctionWorker)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import time
 import traceback
 
@@ -26,13 +25,6 @@ class AckAction:
     meta: dict | None = None
     schedule_in: int | None = None
 
-    def __post_init__(self):
-        if self.error is not None:
-            self.error = json.dumps(self.error)
-
-        if self.meta is not None:
-            self.meta = json.dumps(self.meta)
-
 
 class Executor:
     def __init__(self, job: Job, safe: bool = True):
@@ -43,7 +35,7 @@ class Executor:
         self.result = None
         self.worker = None
 
-        self._start_time = None
+        self._start_time = time.monotonic_ns()
         self._traceback = None
 
     async def execute(self) -> Executor:
@@ -61,8 +53,6 @@ class Executor:
             return self.action.state
 
     def _report_started(self) -> None:
-        self._start_time = time.monotonic_ns()
-
         telemetry.execute(
             "oban.job.start",
             {"job": self.job, "monotonic_time": self._start_time},
@@ -77,6 +67,9 @@ class Executor:
             self._traceback = traceback.format_exc()
 
     def _record_stopped(self) -> None:
+        if self.job.id is None:
+            raise RuntimeError("cannot record stopped job without an id")
+
         match self.result:
             case Exception() as error:
                 if self.job.attempt >= self.job.max_attempts:
@@ -133,7 +126,7 @@ class Executor:
             telemetry.execute("oban.job.stop", meta)
 
     def _reraise_unsafe(self) -> None:
-        if not self.safe and self.status in ("retryable", "discarded"):
+        if not self.safe and isinstance(self.result, BaseException):
             raise self.result
 
     def _retry_backoff(self) -> int:
