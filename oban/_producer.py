@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from . import telemetry
+
+logger = logging.getLogger(__name__)
 from ._executor import Executor
 from .job import Job
 from .types import QueueInfo
@@ -152,7 +155,7 @@ class Producer:
             except asyncio.CancelledError:
                 break
             except Exception:
-                pass
+                logger.exception("Error in producer for queue %s", self._queue)
 
     async def _produce(self) -> None:
         await self._debounce_fetch()
