@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from . import telemetry
-
-logger = logging.getLogger(__name__)
 from ._executor import Executor
 from .job import Job
 from .types import QueueInfo
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ._notifier import Notifier
