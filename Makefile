@@ -26,7 +26,7 @@ format:
 	uv run ruff format .
 
 test:
-	uv run pytest
+	uv run pytest -s
 
 bench:
 	uv run pytest -m benchmark --benchmark-only
