@@ -75,7 +75,7 @@ def _gen_key(job: Job) -> str:
     return hash64(data)
 
 
-def _take_keys(data: dict[str, Any], keys: list[str] | None) -> list[list[Any]]:
+def _take_keys(data: dict[str, Any], keys: list[str] | None) -> list[tuple[str, str]]:
     if not data:
         return []
 

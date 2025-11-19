@@ -337,7 +337,7 @@ class Oban:
 
             >>> count = await oban.retry_many_jobs([job_1, job_2, job_3])
         """
-        job_ids = [job.id if isinstance(job, Job) else job for job in jobs]
+        job_ids = [self._extract_id(job) for job in jobs]
 
         return await self._query.retry_many_jobs(job_ids)
 
@@ -385,7 +385,7 @@ class Oban:
 
             >>> count = await oban.delete_many_jobs([job_1, job_2, job_3])
         """
-        job_ids = [job.id if isinstance(job, Job) else job for job in jobs]
+        job_ids = [self._extract_id(job) for job in jobs]
 
         return await self._query.delete_many_jobs(job_ids)
 
@@ -455,7 +455,7 @@ class Oban:
 
             >>> count = await oban.cancel_many_jobs([job_1, job_2, job_3])
         """
-        job_ids = [job.id if isinstance(job, Job) else job for job in jobs]
+        job_ids = [self._extract_id(job) for job in jobs]
 
         count, executing_ids = await self._query.cancel_many_jobs(job_ids)
 
@@ -897,6 +897,16 @@ class Oban:
                 "signal",
                 {"action": "scale", "queue": queue, "limit": limit, "ident": ident},
             )
+
+    @staticmethod
+    def _extract_id(job: Job | int) -> int:
+        match job:
+            case Job(id=int(id)):
+                return id
+            case int(id):
+                return id
+            case _:
+                raise ValueError("Cannot retry a job that has not been enqueued")
 
     async def _scale_queue_local(self, queue: str, limit: int) -> None:
         producer = self._producers.get(queue)

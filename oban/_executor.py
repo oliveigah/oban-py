@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from . import telemetry
 from ._backoff import jittery_clamped
 from ._worker import resolve_worker
-from .types import Cancel, JobState, Snooze
+from .types import Cancel, Snooze
 
 if TYPE_CHECKING:
     from .job import Job
@@ -48,7 +48,7 @@ class Executor:
         return self
 
     @property
-    def status(self) -> JobState | None:
+    def status(self) -> str | None:
         if self.action:
             return self.action.state
 

@@ -22,7 +22,7 @@ dev = [
     "pytest>=8.3.5",
     "pytest-benchmark>=5.2.3",
     "ruff>=0.9.9",
-    "ty>=0.0.1a25",
+    "ty>=0.0.1a27",
 ]
 docs = [
   "sphinx>=8.0.0",
