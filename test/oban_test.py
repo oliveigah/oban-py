@@ -563,6 +563,17 @@ class TestRetryJob:
         async with oban_instance() as oban:
             await oban.retry_job(99999)
 
+    async def test_retrying_unique_jobs_clears_bitmap(self, oban_instance):
+        async with oban_instance() as oban:
+            job = await Worker.enqueue({"ref": 1}, unique=True, state="completed")
+
+            await oban.retry_job(job)
+
+            job = await get_job(oban, job.id)
+
+            assert job.meta.get("uniq") is True
+            assert job.meta.get("uniq_bmp") == []
+
 
 class TestRetryAllJobs:
     @pytest.mark.oban(queues={"default": 3})
