@@ -1,0 +1,18 @@
+# Oban configuration for the FastAPI demo
+
+# Database connection string
+dsn = "postgresql://localhost/oban_py_fastapi_demo"
+
+# PostgreSQL schema prefix (default: public)
+prefix = "public"
+
+# Queue configurations (name = limit)
+# Each queue processes up to 'limit' jobs concurrently
+[queues]
+default = 10
+mailers = 5
+reports = 3
+
+# Connection pool settings
+pool_min_size = 1
+pool_max_size = 10

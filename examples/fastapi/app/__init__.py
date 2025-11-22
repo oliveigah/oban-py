@@ -1,0 +1,1 @@
+"""FastAPI + Oban demo application."""
