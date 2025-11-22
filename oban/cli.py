@@ -193,6 +193,11 @@ def main() -> None:
 
 @main.command()
 @click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=str),
+    help="Path to TOML configuration file (default: searches for oban.toml)",
+)
+@click.option(
     "--dsn",
     envvar="OBAN_DSN",
     help="PostgreSQL connection string",
@@ -200,18 +205,20 @@ def main() -> None:
 @click.option(
     "--prefix",
     envvar="OBAN_PREFIX",
-    default="public",
     help="PostgreSQL schema name (default: public)",
 )
-def install(dsn: str | None, prefix: str) -> None:
+def install(config: str | None, dsn: str | None, prefix: str | None) -> None:
     """Install the Oban database schema."""
 
     async def run() -> None:
-        logger.info(f"Installing Oban schema in '{prefix}' schema...")
+        conf = _load_conf(config, {"dsn": dsn, "prefix": prefix})
+        schema_prefix = conf.prefix or "public"
+
+        logger.info(f"Installing Oban schema in '{schema_prefix}'...")
 
         try:
-            async with schema_pool(dsn) as pool:
-                await install_schema(pool, prefix=prefix)
+            async with schema_pool(conf.dsn) as pool:
+                await install_schema(pool, prefix=schema_prefix)
             logger.info("Schema installed successfully")
         except Exception as error:
             logger.error(f"Failed to install schema: {error!r}", exc_info=True)
@@ -222,6 +229,11 @@ def install(dsn: str | None, prefix: str) -> None:
 
 @main.command()
 @click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=str),
+    help="Path to TOML configuration file (default: searches for oban.toml)",
+)
+@click.option(
     "--dsn",
     envvar="OBAN_DSN",
     help="PostgreSQL connection string",
@@ -229,18 +241,20 @@ def install(dsn: str | None, prefix: str) -> None:
 @click.option(
     "--prefix",
     envvar="OBAN_PREFIX",
-    default="public",
     help="PostgreSQL schema name (default: public)",
 )
-def uninstall(dsn: str | None, prefix: str) -> None:
+def uninstall(config: str | None, dsn: str | None, prefix: str | None) -> None:
     """Uninstall the Oban database schema."""
 
     async def run() -> None:
-        logger.info(f"Uninstalling Oban schema from '{prefix}' schema...")
+        conf = _load_conf(config, {"dsn": dsn, "prefix": prefix})
+        schema_prefix = conf.prefix or "public"
+
+        logger.info(f"Uninstalling Oban schema from '{schema_prefix}' schema...")
 
         try:
-            async with schema_pool(dsn) as pool:
-                await uninstall_schema(pool, prefix=prefix)
+            async with schema_pool(conf.dsn) as pool:
+                await uninstall_schema(pool, prefix=schema_prefix)
             logger.info("Schema uninstalled successfully")
         except Exception as e:
             logger.error(f"Failed to uninstall schema: {e}", exc_info=True)
