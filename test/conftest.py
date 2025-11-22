@@ -5,7 +5,7 @@ import psycopg
 import uvloop
 
 from oban import Oban
-from oban.config import Config
+from oban._config import Config
 from oban.schema import install
 from oban.testing import reset_oban
 

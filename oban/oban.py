@@ -5,6 +5,8 @@ import socket
 
 from typing import Any, Callable
 
+from psycopg_pool import AsyncConnectionPool
+
 from .job import Job
 from .types import QueueInfo
 from ._leader import Leader
@@ -132,6 +134,58 @@ class Oban:
             return {"limit": config}
         else:
             return config
+
+    @staticmethod
+    async def create_pool(
+        dsn: str | None = None,
+        *,
+        min_size: int | None = None,
+        max_size: int | None = None,
+        timeout: float | None = None,
+    ) -> AsyncConnectionPool:
+        """Create a connection pool for use with Oban.
+
+        This is a convenience method that creates and opens an AsyncConnectionPool.
+        Configuration is loaded from multiple sources in order of precedence (lowest
+        to highest):
+
+        1. oban.toml in the current directory
+        2. Environment variables (OBAN_DSN, OBAN_POOL_MIN_SIZE, etc.)
+        3. Explicit arguments passed to this method
+
+        The caller is responsible for closing the pool when done.
+
+        Args:
+            dsn: PostgreSQL connection string (e.g., "postgresql://localhost/mydb")
+            min_size: Minimum number of connections to keep open (default: 1)
+            max_size: Maximum number of connections in the pool (default: 10)
+            timeout: Timeout in seconds for acquiring a connection (default: 30.0)
+
+        Returns:
+            An open AsyncConnectionPool ready for use
+
+        Example:
+            Using configuration from oban.toml or environment:
+
+            >>> pool = await Oban.create_pool()
+            >>> async with Oban(pool=pool) as oban:
+            ...     await oban.enqueue(SomeWorker.new({"key": "value"}))
+            >>> await pool.close()
+
+            Overriding the dsn:
+
+            >>> pool = await Oban.create_pool("postgresql://localhost/mydb")
+        """
+        from ._config import Config
+
+        config = Config.load(
+            dsn=dsn,
+            pool_min_size=min_size,
+            pool_max_size=max_size,
+            pool_timeout=timeout,
+        )
+
+        return await config.create_pool()
 
     async def __aenter__(self) -> Oban:
         return await self.start()

@@ -1,6 +1,6 @@
 from textwrap import dedent
 
-from oban.config import Config
+from oban._config import Config
 
 
 class TestFromEnv:

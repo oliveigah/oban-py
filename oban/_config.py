@@ -90,6 +90,14 @@ class Config:
 
         return cls(**params)
 
+    @classmethod
+    def load(cls, path: str | None = None, **overrides: Any) -> Config:
+        tml_conf = cls.from_toml(path)
+        env_conf = cls.from_env()
+        cli_conf = cls(**overrides)
+
+        return tml_conf.merge(env_conf).merge(cli_conf)
+
     def merge(self, other: Config) -> Config:
         def merge_dicts(this, that) -> dict | None:
             if that is None or this is None:

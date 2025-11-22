@@ -18,7 +18,7 @@ from psycopg.types.json import set_json_dumps, set_json_loads
 from psycopg_pool import AsyncConnectionPool
 
 from oban import __version__
-from oban.config import Config
+from oban._config import Config
 from oban.schema import install as install_schema, uninstall as uninstall_schema
 from oban.telemetry import logger as telemetry_logger
 
@@ -410,16 +410,15 @@ def _load_conf(conf_path: str | None, params: Any) -> Config:
     if conf_path and not Path(conf_path).exists():
         raise click.UsageError(f"--config file '{conf_path}' doesn't exist")
 
-    tml_conf = Config.from_toml(conf_path)
-    env_conf = Config.from_env()
-    cli_conf = Config.from_cli(params)
+    if queues := params.pop("queues", None):
+        params["queues"] = Config._parse_queues(queues)
 
-    all_conf = tml_conf.merge(env_conf).merge(cli_conf)
+    conf = Config.load(conf_path, **params)
 
-    if not all_conf.dsn:
+    if not conf.dsn:
         raise click.UsageError("--dsn, OBAN_DSN, or dsn in oban.toml required")
 
-    return all_conf
+    return conf
 
 
 if __name__ == "__main__":

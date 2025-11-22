@@ -3,15 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from oban import Oban
-from oban.config import Config
 
 from .workers import SendEmailWorker, GenerateReportWorker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    config = Config.from_toml()
-    pool = await config.create_pool()
+    pool = await Oban.create_pool()
 
     Oban(pool=pool, name="oban")
 
