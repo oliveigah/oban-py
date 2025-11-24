@@ -1,27 +1,29 @@
 # Quickstart Guide
 
-This guide will help you get started with Oban quickly.
+This guide walks you through the essentials of defining workers, enqueueing jobs, and actually
+running Oban.
 
 ## Defining Workers
 
-Oban provides two ways to define workers: function-based and class-based.
+Oban provides two ways to define workers: function-based for simple tasks, and class-based when
+you need more control.
 
-### Function-based Workers
+### Function Workers
 
-Use the `@job` decorator to define a function-based worker:
+For simple tasks, use the `@job` decorator to turn any function into a worker:
 
 ```python
 from oban import job
 
 @job(queue="default")
-def send_email(email_address, subject, body):
-    # Your email sending logic here
-    print(f"Sending email to {email_address}")
+def send_email(email, subject, body):
+    print("Sending an email...")
 ```
 
-### Class-based Workers
+### Class Workers
 
-Use the `@worker` decorator for class-based workers:
+Use the `@worker` decorator when you need access to job details (e.g. attempts, tags, meta) or
+want to customize retry backoff logic:
 
 ```python
 from oban import worker
@@ -29,71 +31,14 @@ from oban import worker
 @worker(queue="exports", priority=2)
 class ExportWorker:
     async def process(self, job):
-        # Access job arguments
-        file_path = job.args["file_path"]
-        # Your export logic here
-        print(f"Exporting {file_path}")
+        file_path = job.args["path"]
+        print("Generating an export...")
 ```
 
-## Setting up Oban
+### Periodic Jobs (Cron)
 
-Create an Oban instance with your database connection and queue configuration:
-
-```python
-from oban import Oban
-
-oban = Oban(
-    dsn="postgresql://user:password@localhost/mydb",
-    queues={"default": 10, "mailers": 5, "exports": 2},
-    pruner={"max_age": 60}  # Prune jobs older than 60 seconds
-)
-```
-
-The queue configuration specifies the maximum number of concurrent jobs per queue.
-
-## Enqueueing Jobs
-
-### Basic Enqueueing
-
-Enqueue jobs from your application code:
-
-```python
-# Function-based worker
-await send_email.enqueue("user@example.com", "Welcome", "Thanks for signing up!")
-
-# Class-based worker
-await ExportWorker.enqueue({"file_path": "/data/export.csv"})
-```
-
-### Batch Enqueueing
-
-Enqueue multiple jobs efficiently:
-
-```python
-oban.enqueue_many(
-    send_email.new("user1@example.com", "Hello", "Message 1"),
-    send_email.new("user2@example.com", "Hello", "Message 2"),
-)
-```
-
-### Scheduled Jobs
-
-Schedule jobs for future execution:
-
-```python
-from datetime import datetime, timedelta
-
-# Schedule for a specific time
-scheduled_time = datetime.now() + timedelta(hours=24)
-await send_email.enqueue(
-    "user@example.com",
-    "Reminder",
-    "Don't forget!",
-    scheduled_at=scheduled_time
-)
-```
-
-## Periodic Jobs (Cron)
+Periodic jobs run on a predictable schedule. Unlike one-time scheduled jobs, periodic jobs repeat
+automatically without requiring you to insert new jobs after each execution.
 
 Define workers that run on a schedule using the `cron` parameter:
 
@@ -111,101 +56,90 @@ class BusinessHoursReport:
         print("Generating report during business hours...")
 ```
 
-Cron expressions support:
-- Standard cron syntax: `"0 * * * *"` (every hour)
-- Nicknames: `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`
-- Month/day aliases: `MON-FRI`, `JAN`, `DEC`
+## Enqueueing Jobs
 
-### Import-Safe Workers
+Once you've defined workers, you can enqueue jobs to run them. Jobs are stored in PostgreSQL and
+executed later when available.
 
-When using CLI auto-discovery, ensure your workers are **import-safe**:
-
-**Good** - Defer initialization to `process()`:
-```python
-@worker(cron="@hourly")
-class DataSync:
-    async def process(self, job):
-        api_client = APIClient()  # Initialize here
-        await api_client.sync()
-```
-
-**Bad** - Side effects at module level:
-```python
-# This runs on import, even in CLI!
-API_CLIENT = APIClient()  # ❌ Avoid this
-
-@worker(cron="@hourly")
-class DataSync:
-    async def process(self, job):
-        await API_CLIENT.sync()
-```
-
-## Running Workers
-
-### Using the CLI
-
-Start the Oban worker process:
-
-```bash
-oban start --dsn "postgresql://user:password@localhost/mydb"
-```
-
-#### Cron Auto-Discovery
-
-The CLI automatically discovers and loads cron workers in three modes:
-
-**Full Auto** (discovers all `@worker(cron=...)` in current directory):
-```bash
-oban start --dsn "postgresql://..."
-```
-
-**Semi-Auto** (discovers cron workers in specific paths):
-```bash
-oban start --dsn "postgresql://..." --cron-paths "myapp/workers/**/*.py,myapp/jobs/*.py"
-```
-
-**Manual** (explicitly specify modules to import):
-```bash
-oban start --dsn "postgresql://..." --cron-modules "myapp.workers,myapp.jobs.cleanup"
-```
-
-**Validate without starting**:
-```bash
-oban start --dsn "postgresql://..." --dry-run
-```
-
-### Programmatically
-
-Run Oban as a context manager in your application:
+For function workers, pass the same parameters as you would for the original function:
 
 ```python
-import signal
-from myapp.oban import oban
-
-if __name__ == "__main__":
-    with oban:
-        signal.pause()
+await send_email.enqueue("user@example.com", "Welcome", "Thanks for signing up!")
 ```
 
-Or manage the lifecycle manually:
+For class-based workers, enqueue using a single `args` dictionary:
 
 ```python
-async def main():
-    await oban.start()
-    # Your application logic
-    await oban.stop()
+await ExportWorker.enqueue({"path": "/data/export.csv"})
 ```
 
-## Client-only Mode
+### Batch Enqueueing
 
-If you only need to enqueue jobs (e.g., in a web application):
+When you need to enqueue many jobs at once, use `enqueue_many()` for better performance. It
+inserts all jobs in a single database query:
 
 ```python
-# web.py
+oban.enqueue_many(
+    send_email.new("user1@example.com", "Hello", "Message 1"),
+    send_email.new("user2@example.com", "Hello", "Message 2"),
+)
+```
+
+### Scheduled Jobs
+
+Schedule jobs to run at a specific time in the future. This is useful for reminders, follow-ups,
+or any task that shouldn't run immediately:
+
+```python
+from datetime import timedelta
+
+await send_email.enqueue(
+    "user@example.com",
+    "Reminder",
+    "Don't forget!",
+    schedule_in=timedelta(hours=6)
+)
+```
+
+## Setting up and Running Oban
+
+Before enqueueing or processing jobs, you need to get an Oban instance running.
+
+That's either done "standalone" (separate worker process) or "embedded" (workers run alongside
+your web app). For either option, you need some configuration.
+
+### Configuration
+
+Start by creating an `oban.toml` file in your project root:
+
+```toml
+dsn = "postgresql://user:password@localhost/mydb"
+
+[queues]
+default = 10
+mailers = 5
+exports = 2
+
+[pruner]
+max_age = 3_600  # Prune completed jobs older than 1 hour
+```
+
+The queue values specify maximum concurrent jobs per queue. Configuration is loaded automatically
+from `oban.toml`, environment variables, and can be overridden programmatically as needed.
+
+### Running in Standalone Mode
+
+This approach separates your web app (which only enqueues jobs) from the worker process (which
+executes them). It's ideal for scaling workers independently and keeping job execution out of the
+web process:
+
+**In your web app:**
+
+```python
 from oban import Oban
 
-# Don't specify queues for client-only mode
-oban = Oban(dsn="postgresql://user:password@localhost/mydb")
+pool = await Oban.create_pool()
+oban = Oban(pool=pool)  # No queues, client-only
 
 @app.route("/send-email")
 async def send_email_route():
@@ -213,10 +147,32 @@ async def send_email_route():
     return "Email queued"
 ```
 
-Run a separate worker process to actually process the jobs.
+**Start the worker process with the CLI:**
 
-## Next Steps
+```bash
+oban start
+```
 
-- Check out the [API Reference](api) for detailed information about all available options
-- Learn about [CLI commands](cli) for managing Oban
-- Explore advanced features like retries, unique jobs, and telemetry in the full documentation
+### Running in Embedded Mode
+
+This approach runs workers directly in your application process. It's simpler for development
+and works well for lightweight apps where job processing doesn't need independent scaling.
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from oban import Oban
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    pool = await Oban.create_pool()
+    oban = Oban(pool=pool, queues={"default": 10})
+
+    async with oban:
+        yield
+
+app = FastAPI(lifespan=lifespan)
+```
+
+Keep exploring to learn about advanced features like retry backoff, unique jobs, and advanced
+scheduling.

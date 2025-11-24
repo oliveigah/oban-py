@@ -1,93 +1,107 @@
 # Installation
 
-## Requirements
+Oban requires Python 3.12+ and PostgreSQL 12.0+. Ensure both are available and that PostgreSQL is
+running before installation.
 
-- Python 3.12 or higher
-- PostgreSQL database
-- `uv` package manager (recommended) or `pip`
+## Installing the Package
 
-## Installing Oban
-
-### Using uv (Recommended)
+Install `oban` using your preferred package manager:
 
 ```bash
 uv add oban
-```
-
-### Using pip
-
-```bash
+# or
 pip install oban
 ```
 
-## Database Setup
+## Configuration
 
-Oban requires PostgreSQL. Make sure you have a PostgreSQL database available.
+Create an `oban.toml` file in your project root with your database connection string:
 
-### Installing the Database Schema
+```toml
+dsn = "postgresql://user:password@localhost/mydb"
+```
 
-Before using Oban, you need to install the required database schema:
+## Installing the Schema
+
+After the `oban` package and sub-dependencies are installed, you must install the necessary tables
+to your database. Installation can be done through the CLI, with a migration tool like Alembic, or
+programmatically.
+
+`````{tab-set}
+
+````{tab-item} CLI
+The simplest approach is to use the CLI with your configuration file:
+
+```bash
+oban install
+```
+
+Or specify the connection string directly (if you didn't create the `oban.toml` config):
 
 ```bash
 oban install --dsn "postgresql://user:password@localhost/mydb"
 ```
+````
 
-Or using Python:
+````{tab-item} Migrations
+If you're using a migration framework like Alembic or Django, use the `install_sql` function to
+get the raw SQL:
+
+```python
+from oban.schema import install_sql
+
+sql = install_sql()
+```
+
+For Alembic:
+
+```python
+from alembic import op
+from oban.schema import install_sql
+
+def upgrade():
+    op.execute(install_sql())
+```
+
+For Django:
+
+```python
+from django.db import migrations
+from oban.schema import install_sql
+
+class Migration(migrations.Migration):
+    operations = [
+        migrations.RunSQL(install_sql()),
+    ]
+```
+````
+
+````{tab-item} Python
+You can also install the schema programmatically:
 
 ```python
 import asyncio
 from oban import Oban
+from oban.schema import install
 
 async def setup():
-    oban = Oban(dsn="postgresql://user:password@localhost/mydb")
-    await oban.install()
+    pool = await Oban.create_pool()
+    await install(pool)
+    await pool.close()
 
 asyncio.run(setup())
 ```
+````
 
-### Integrating with Migration Systems
-
-If you're using a migration system like Alembic or Django migrations, you can generate the schema SQL:
-
-```python
-from oban import schema
-
-# Get the SQL for creating the schema
-sql = schema.get_install_sql()
-# Add this to your migration file
-```
-
-## Development Installation
-
-To install Oban for development with all dependencies:
-
-```bash
-# Clone the repository
-git clone https://github.com/sorentwo/oban.git
-cd oban
-
-# Install with development dependencies
-uv sync --group dev
-
-# Install with documentation dependencies
-uv sync --group docs
-```
+`````
 
 ## Verification
 
-Verify your installation by running:
+Verify the installation by starting Oban:
 
 ```bash
-oban --help
+oban start
 ```
 
-Or in Python:
-
-```python
-import oban
-print(oban.__version__)
-```
-
-## Next Steps
-
-Continue to the [Quickstart](quickstart.md) guide to learn how to use Oban.
+You should see output indicating Oban has started and is ready to process jobs. It's time to
+create your first worker, schedule periodic jobs, and configure queues!

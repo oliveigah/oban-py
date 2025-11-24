@@ -30,6 +30,7 @@ docs = [
   "myst-parser>=4.0.0",
   "sphinx-click>=6.0.0",
   "sphinx-autodoc-typehints>=2.0.0",
+  "sphinx-design>=0.6.1",
 ]
 
 [tool.uv]

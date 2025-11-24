@@ -317,7 +317,7 @@ def uninstall(config: str | None, dsn: str | None, prefix: str | None) -> None:
 @click.option(
     "--cron-paths",
     envvar="OBAN_CRON_PATHS",
-    help="Comma-separated list of file patterns to search for cron workers (e.g., 'myapp/workers/**/*.py')",
+    help="Comma-separated list of directories to search for cron workers (e.g., 'myapp/workers')",
 )
 @click.option(
     "--dry-run",

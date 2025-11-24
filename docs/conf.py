@@ -29,6 +29,7 @@ extensions = [
     "sphinx.ext.intersphinx",  # Link to other project's documentation
     "sphinx_autodoc_typehints",  # Better type hint rendering
     "sphinx_click",  # Auto-generate CLI documentation
+    "sphinx_design",  # Tabs, cards, and other UI components
     "myst_parser",  # Markdown support
 ]
 

@@ -61,7 +61,7 @@ Oban is fundamentally different from other background job processing tools becau
 data for historic metrics and inspection_. You can leave your application running indefinitely
 without worrying about jobs being lost or orphaned due to crashes.
 
-#### Advantages Over Other Tools
+### Advantages Over Other Tools
 
 - **Async Native** — Built entirely on asyncio with async/await throughout. Integrates naturally
   with async web frameworks.
@@ -76,7 +76,7 @@ without worrying about jobs being lost or orphaned due to crashes.
 - **Database Backups** — Jobs are stored inside of your primary database, which means they are
   backed up together with the data that they relate to.
 
-#### Advanced Features
+### Advanced Features
 
 - **Isolated Queues** — Jobs are stored in a single table but are executed in distinct queues.
   Each queue runs in isolation, with its own concurrency limits, ensuring that a job in a single
@@ -128,7 +128,7 @@ An official set of extensions that expand what Oban is capable of are coming soo
 Oban requires:
 
 * Python 3.12+
-* PostgreSQL 12.0+
+* PostgreSQL 14.0+
 
 ## Installation
 
