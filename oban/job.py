@@ -14,6 +14,7 @@ from typing import Any, TypedDict, TypeVar
 
 import orjson
 
+from ._recorded import encode_recorded
 from ._unique import with_uniq_meta
 
 
@@ -89,6 +90,86 @@ class UniqueOptions(TypedDict, total=False):
     group: UniqueGroup
     keys: list[str] | None
     period: int | None
+
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True)
+class Snooze:
+    """Reschedule a job to run again after a delay.
+
+    Return this from a worker's process method to put the job back in the queue
+    with a delayed scheduled_at time.
+
+    Example:
+        >>> async def process(self, job):
+        ...     if not ready_to_process():
+        ...         return Snooze(60)  # Try again in 60 seconds
+    """
+
+    seconds: int
+
+
+@dataclass(frozen=True, slots=True)
+class Cancel:
+    """Cancel a job and stop processing.
+
+    Return this from a worker's process method to mark the job as cancelled.
+    The reason is stored in the job's errors list.
+
+    Example:
+        >>> async def process(self, job):
+        ...     if job.cancelled():
+        ...         return Cancel("Job was cancelled by user")
+    """
+
+    reason: str
+
+
+RECORDED_LIMIT = 64_000_000  # 64MB default limit
+
+
+@dataclass(slots=True)
+class Record:
+    """Record a value to be stored with the completed job.
+
+    Return this from a worker's process method to store a value in the job's
+    meta field. The value is encoded using Erlang term format for compatibility
+    with Oban Pro.
+
+    Args:
+        value: The value to record. Must be serializable by erlpack.
+        limit: Maximum size in bytes for the encoded value. Defaults to 64MB.
+
+    Raises:
+        ValueError: If the encoded value exceeds the size limit.
+
+    Example:
+        >>> async def process(self, job):
+        ...     result = await compute_something()
+        ...     return Record(result)
+
+        >>> # With custom size limit
+        >>> return Record(large_result, limit=32_000_000)
+    """
+
+    value: Any
+    limit: int = RECORDED_LIMIT
+    encoded: str = field(init=False, repr=False)
+
+    def __post_init__(self):
+        encoded = encode_recorded(self.value)
+
+        if len(encoded) > self.limit:
+            raise ValueError(
+                f"recorded value is {len(encoded)} bytes, exceeds limit of {self.limit}"
+            )
+
+        setattr(self, "encoded", encoded)
+
+
+type Result[T] = Cancel | Snooze | Record | T | None
 
 
 TIMESTAMP_FIELDS = [
@@ -330,41 +411,3 @@ class Job:
         if period := self.unique.get("period", None):
             if not isinstance(period, int):
                 raise ValueError(f"invalid unique period: {period}")
-
-
-T = TypeVar("T")
-
-
-@dataclass(frozen=True, slots=True)
-class Snooze:
-    """Reschedule a job to run again after a delay.
-
-    Return this from a worker's process method to put the job back in the queue
-    with a delayed scheduled_at time.
-
-    Example:
-        >>> async def process(self, job):
-        ...     if not ready_to_process():
-        ...         return Snooze(60)  # Try again in 60 seconds
-    """
-
-    seconds: int
-
-
-@dataclass(frozen=True, slots=True)
-class Cancel:
-    """Cancel a job and stop processing.
-
-    Return this from a worker's process method to mark the job as cancelled.
-    The reason is stored in the job's errors list.
-
-    Example:
-        >>> async def process(self, job):
-        ...     if job.cancelled():
-        ...         return Cancel("Job was cancelled by user")
-    """
-
-    reason: str
-
-
-type Result[T] = Snooze | Cancel | T | None

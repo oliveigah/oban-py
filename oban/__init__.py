@@ -1,12 +1,12 @@
 from .decorators import job, worker
-from .job import Cancel, Job, Result, Snooze
+from .job import Cancel, Job, Record, Snooze
 from .oban import Oban
 
 __all__ = [
     "Cancel",
     "Job",
     "Oban",
-    "Result",
+    "Record",
     "Snooze",
     "job",
     "worker",

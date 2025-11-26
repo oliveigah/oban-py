@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from . import telemetry
 from ._backoff import jittery_clamped
 from ._worker import resolve_worker
-from .job import Cancel, Snooze
+from .job import Cancel, Record, Snooze
 
 if TYPE_CHECKING:
     from .job import Job
@@ -88,6 +88,11 @@ class Executor:
                         schedule_in=self._retry_backoff(),
                     )
 
+            case Cancel(reason=reason):
+                self.action = AckAction(
+                    id=self.job.id, state="cancelled", error=self._format_error(reason)
+                )
+
             case Snooze(seconds=seconds):
                 self.action = AckAction(
                     id=self.job.id,
@@ -97,9 +102,11 @@ class Executor:
                     meta={"snoozed": self.job.meta.get("snoozed", 0) + 1},
                 )
 
-            case Cancel(reason=reason):
+            case Record(encoded=encoded):
                 self.action = AckAction(
-                    id=self.job.id, state="cancelled", error=self._format_error(reason)
+                    id=self.job.id,
+                    state="completed",
+                    meta={"recorded": True, "return": encoded},
                 )
 
             case _:

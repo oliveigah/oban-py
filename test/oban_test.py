@@ -3,7 +3,8 @@ import pytest
 from datetime import datetime, timedelta, timezone
 
 from .helpers import with_backoff
-from oban import Cancel, Snooze, worker
+from oban import Cancel, Record, Snooze, worker
+from oban._recorded import decode_recorded
 
 
 async def get_job(oban, job_id):
@@ -34,6 +35,8 @@ class Worker:
                 await asyncio.sleep(job.args["sleep"])
 
                 return None
+            case {"act": "re"}:
+                return Record(job.args["val"])
             case _:
                 return None
 
@@ -214,6 +217,21 @@ class TestIntegration:
             assert job.scheduled_at > datetime.now(timezone.utc)
             assert job.meta["snoozed"] == 1
             assert job.meta["keep"]
+
+    @pytest.mark.oban(queues={"default": 2})
+    async def test_recorded_jobs_store_encoded_value_in_meta(self, oban_instance):
+        async with oban_instance() as oban:
+            job = await Worker.enqueue(
+                {"act": "re", "ref": 1, "val": {"count": 42}}, meta={"keep": True}
+            )
+
+            await with_backoff(lambda: assert_state(oban, job.id, "completed"))
+
+            job = await get_job(oban, job.id)
+
+            assert job.meta["recorded"]
+            assert job.meta["keep"]
+            assert decode_recorded(job.meta["return"]) == {"count": 42}
 
     @pytest.mark.oban(queues={"default": 2})
     async def test_errored_jobs_are_retryable_with_backoff(self, oban_instance):

@@ -1,7 +1,8 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from oban.job import Job
+from oban.job import Job, Record
+from oban._recorded import decode_recorded
 
 
 class TestJobValidation:
@@ -145,3 +146,26 @@ class TestUniqueOptions:
     def test_unique_group_rejects_invalid_groups(self):
         with pytest.raises(ValueError, match="group"):
             Job.new(worker="Worker", unique={"group": "invalid"})
+
+
+class TestRecord:
+    def test_record_stores_encoded_value(self):
+        record = Record({"key": "value"})
+
+        assert record.encoded
+        assert decode_recorded(record.encoded) == {"key": "value"}
+
+    def test_record_encodes_various_types(self):
+        assert decode_recorded(Record("string").encoded) == "string"
+        assert decode_recorded(Record(123).encoded) == 123
+        assert decode_recorded(Record([1, 2, 3]).encoded) == [1, 2, 3]
+        assert decode_recorded(Record(None).encoded) is None
+        assert decode_recorded(Record({"nested": {"a": 1}}).encoded) == {
+            "nested": {"a": 1}
+        }
+
+    def test_record_raises_on_exceeding_limit(self):
+        large_value = "x" * 100
+
+        with pytest.raises(ValueError, match="exceeds limit"):
+            Record(large_value, limit=10)
