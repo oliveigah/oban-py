@@ -4,6 +4,7 @@ help:
 	@echo "Available targets:"
 	@echo "  check       - Check formatting and linting"
 	@echo "  ci          - Run checks and tests (for CI)"
+	@echo "  dropdb      - Drop all oban_py_test_* databases"
 	@echo "  fix         - Fix linting issues automatically"
 	@echo "  format      - Format code with ruff"
 	@echo "  test        - Run tests with pytest"
@@ -40,3 +41,6 @@ docs-serve: docs
 
 docs-clean:
 	rm -rf docs/_build
+
+dropdb:
+	@psql -d postgres -t -c "SELECT datname FROM pg_database WHERE datname LIKE 'oban_py_test_%'" | xargs -I {} dropdb {}
