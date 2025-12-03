@@ -70,20 +70,11 @@ This expanded configuration demonstrates several advanced options:
 ### Paused Queues
 
 When a queue is configured with `paused: True`, it won't process any jobs until explicitly
-resumed. This is useful for maintenance periods, controlling 84 when resource-intensive jobs can
+resumed. This is useful for maintenance periods, controlling when resource-intensive jobs can
 run, or temporarily disabling certain types of jobs.
 
-You can resume a paused queue programmatically:
-
-```python
-await oban.resume_queue("media")
-```
-
-And pause an active queue:
-
-```python
-await oban.pause_queue("media")
-```
+See [Managing Queues](managing_queues.md) for how to pause, resume, scale, start, and stop
+queues at runtime.
 
 ## Queue Guidelines
 

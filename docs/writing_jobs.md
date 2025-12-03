@@ -1,6 +1,6 @@
 # Writing Jobs
 
-This guide covers how to define workers and write effective job logic. You'll learn how to choose
+This guide covers how to define workers and write effective jobs. You'll learn how to choose
 between function and class-based workers, configure job options, control execution flow with
 snooze and cancel, access job context, and customize retry behavior.
 

@@ -22,6 +22,7 @@ production
 :caption: Guides
 
 defining_queues
+managing_queues
 writing_jobs
 scheduling_jobs
 periodic_jobs
