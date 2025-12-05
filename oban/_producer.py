@@ -143,15 +143,20 @@ class Producer:
             self._loop_task.cancel()
 
             await self._notifier.unlisten(self._listen_token)
-            await self._query.update_producer(
-                uuid=self._uuid,
-                meta={
-                    "paused": True,
-                    "shutdown_started_at": datetime.now(timezone.utc).isoformat(),
-                },
-            )
 
             running_tasks = [task for (_job, task) in self._running_jobs.values()]
+
+            if running_tasks:
+                try:
+                    now = datetime.now(timezone.utc).isoformat()
+                    await self._query.update_producer(
+                        uuid=self._uuid,
+                        meta={"paused": True, "shutdown_started_at": now},
+                    )
+                except Exception:
+                    logger.debug(
+                        "Failed to update producer %s during shutdown", self._uuid
+                    )
 
             await asyncio.gather(
                 self._loop_task,
