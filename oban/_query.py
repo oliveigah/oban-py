@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 from ._executor import AckAction
+from ._extensions import use_ext
 from .job import Job, TIMESTAMP_FIELDS
 
 ACKABLE_FIELDS = [
@@ -53,6 +54,65 @@ UPDATABLE_FIELDS = [
     "tags",
     "worker",
 ]
+
+
+async def _ack_jobs(query: Query, acks: list[AckAction]) -> list[int]:
+    async with query._pool.connection() as conn:
+        async with conn.transaction():
+            stmt = Query._load_file("ack_job.sql", query._prefix)
+            acked_ids = []
+
+            for ack in acks:
+                args = {
+                    field: Query._cast_type(field, getattr(ack, field))
+                    for field in ACKABLE_FIELDS
+                }
+
+                result = await conn.execute(stmt, args)
+                row = await result.fetchone()
+
+                if row:
+                    acked_ids.append(row[0])
+
+            return acked_ids
+
+
+async def _insert_jobs(query: Query, jobs: list[Job]) -> list[Job]:
+    async with query._pool.connection() as conn:
+        stmt = Query._load_file("insert_job.sql", query._prefix)
+        seen = set([])
+        inserted = []
+
+        for job in jobs:
+            uniq_key = job.meta.get("uniq_key", None)
+
+            if uniq_key and uniq_key in seen:
+                inserted.append(replace(job, conflicted=True))
+                continue
+            elif uniq_key:
+                seen.add(uniq_key)
+
+            args = {
+                key: Query._cast_type(key, getattr(job, key))
+                for key in INSERTABLE_FIELDS
+            }
+
+            result = await conn.execute(stmt, args)
+            row = await result.fetchone()
+
+            inserted.append(
+                replace(
+                    job,
+                    id=row[0],
+                    inserted_at=row[1],
+                    queue=row[2],
+                    scheduled_at=row[3],
+                    state=row[4],
+                    conflicted=row[5],
+                )
+            )
+
+        return inserted
 
 
 class Query:
@@ -107,22 +167,7 @@ class Query:
     # Jobs
 
     async def ack_jobs(self, acks: list[AckAction]) -> list[int]:
-        async with self._pool.connection() as conn:
-            async with conn.transaction():
-                stmt = self._load_file("ack_jobs.sql", self._prefix)
-                args = {}
-
-                for field in ACKABLE_FIELDS:
-                    values = [
-                        self._cast_type(field, getattr(ack, field)) for ack in acks
-                    ]
-
-                    args[field] = values
-
-                result = await conn.execute(stmt, args)
-                rows = await result.fetchall()
-
-                return [row[0] for row in rows]
+        return await use_ext("query.ack_jobs", _ack_jobs, self, acks)
 
     async def all_jobs(self, states: list[str]) -> list[Job]:
         async with self._pool.connection() as conn:
@@ -178,42 +223,7 @@ class Query:
                     return await cur.fetchall()
 
     async def insert_jobs(self, jobs: list[Job]) -> list[Job]:
-        async with self._pool.connection() as conn:
-            stmt = self._load_file("insert_jobs.sql", self._prefix)
-            args = defaultdict(list)
-            seen = set([])
-            dupes = []
-
-            for job in jobs:
-                uniq_key = job.meta.get("uniq_key", None)
-
-                if uniq_key and uniq_key in seen:
-                    dupes.append(replace(job, conflicted=True))
-
-                    continue
-                elif uniq_key:
-                    seen.add(uniq_key)
-
-                for key in INSERTABLE_FIELDS:
-                    args[key].append(self._cast_type(key, getattr(job, key)))
-
-            result = await conn.execute(stmt, args)
-            rows = await result.fetchall()
-
-            inserted = [
-                replace(
-                    job,
-                    id=row[0],
-                    inserted_at=row[1],
-                    queue=row[2],
-                    scheduled_at=row[3],
-                    state=row[4],
-                    conflicted=row[5],
-                )
-                for job, row in zip(jobs, rows)
-            ]
-
-            return inserted + dupes
+        return await use_ext("query.insert_jobs", _insert_jobs, self, jobs)
 
     async def prune_jobs(self, max_age: int, limit: int) -> int:
         async with self._pool.connection() as conn:

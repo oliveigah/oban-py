@@ -107,14 +107,13 @@ class TestEnqueueMany:
         async with oban_instance() as oban:
             job_1, job_2, job_3 = await oban.enqueue_many(job_1, job_2, job_3)
 
-            # Conflicted items are always returned last
             assert not job_1.conflicted
-            assert not job_2.conflicted
-            assert job_3.conflicted
+            assert job_2.conflicted
+            assert not job_3.conflicted
 
             assert job_1.id
-            assert job_2.id
-            assert not job_3.id
+            assert not job_2.id
+            assert job_3.id
 
 
 class TestIntegration:
