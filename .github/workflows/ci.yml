@@ -82,7 +82,17 @@ jobs:
         run: uv run ty check
         if: ${{ matrix.lint }}
 
+      - name: Set up database
+        env:
+          DSN_BASE: postgresql://postgres:postgres@localhost:5432
+        run: make db-setup
+
       - name: Run tests
         env:
           DSN_BASE: postgresql://postgres:postgres@localhost:5432
         run: uv run pytest
+
+      - name: Tear down database
+        env:
+          DSN_BASE: postgresql://postgres:postgres@localhost:5432
+        run: make db-teardown

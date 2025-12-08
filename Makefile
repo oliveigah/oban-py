@@ -1,17 +1,23 @@
-.PHONY: format check fix test bench ci docs docs-serve docs-clean help
+.PHONY: bench check ci db-reset db-setup db-teardown docs docs-clean docs-serve fix format help test
+
+TEST_DB = oban_py_test
+DSN_BASE ?= postgresql://postgres@localhost
+TEST_DSN = $(DSN_BASE)/$(TEST_DB)
 
 help:
 	@echo "Available targets:"
+	@echo "  bench       - Run benchmarks with pytest-benchmark"
 	@echo "  check       - Check formatting and linting"
 	@echo "  ci          - Run checks and tests (for CI)"
-	@echo "  dropdb      - Drop all oban_py_test_* databases"
+	@echo "  db-reset    - Drop and recreate test database"
+	@echo "  db-setup    - Create test database and install schema"
+	@echo "  db-teardown - Uninstall schema and drop test database"
+	@echo "  docs        - Build HTML documentation"
+	@echo "  docs-clean  - Clean built documentation"
+	@echo "  docs-serve  - Serve documentation locally on port 8000"
 	@echo "  fix         - Fix linting issues automatically"
 	@echo "  format      - Format code with ruff"
 	@echo "  test        - Run tests with pytest"
-	@echo "  bench       - Run benchmarks with pytest-benchmark"
-	@echo "  docs        - Build HTML documentation"
-	@echo "  docs-serve  - Serve documentation locally on port 8000"
-	@echo "  docs-clean  - Clean built documentation"
 
 check:
 	uv run ruff format --check .
@@ -49,5 +55,14 @@ docs-clean:
 	rm -rf docs/_build
 	rm -f docs/pro_*.md
 
-dropdb:
-	@psql -d postgres -t -c "SELECT datname FROM pg_database WHERE datname LIKE 'oban_py_test_%'" | xargs -I {} dropdb {}
+db-setup:
+	@createdb $(TEST_DB) 2>/dev/null || true
+	@uv run oban install --dsn $(TEST_DSN)
+
+db-reset:
+	@dropdb --if-exists $(TEST_DB)
+	@$(MAKE) db-setup
+
+db-teardown:
+	@uv run oban uninstall --dsn $(TEST_DSN)
+	@dropdb --if-exists $(TEST_DB)
