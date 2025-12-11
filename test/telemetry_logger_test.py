@@ -22,7 +22,6 @@ class FailureWorker:
 
 
 class TestLoggerHandler:
-    @pytest.mark.asyncio
     async def test_logs_start_and_stop_events_for_successful_job(self, caplog):
         caplog.set_level(logging.DEBUG, logger="oban")
 
@@ -54,7 +53,6 @@ class TestLoggerHandler:
         assert stop_data["duration"] > 0
         assert stop_data["queue_time"] > 0
 
-    @pytest.mark.asyncio
     async def test_logs_start_and_exception_events_for_failed_job(self, caplog):
         caplog.set_level(logging.DEBUG, logger="oban")
 

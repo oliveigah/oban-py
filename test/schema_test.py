@@ -78,7 +78,6 @@ class TestUninstallSql:
 
 
 class TestInstall:
-    @pytest.mark.asyncio
     async def test_creates_schema_in_database(self, isolated_db):
         await install(isolated_db)
 
@@ -88,7 +87,6 @@ class TestInstall:
         assert "oban_leaders" in tables
         assert "oban_producers" in tables
 
-    @pytest.mark.asyncio
     async def test_creates_schema_in_database_using_prefix(self, isolated_db):
         async with isolated_db.connection() as conn:
             await conn.execute("CREATE SCHEMA IF NOT EXISTS isolated")
@@ -103,7 +101,6 @@ class TestInstall:
 
 
 class TestUninstall:
-    @pytest.mark.asyncio
     async def test_removes_schema_from_database(self, isolated_db):
         await install(isolated_db)
         await uninstall(isolated_db)

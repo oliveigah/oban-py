@@ -242,7 +242,6 @@ class TestSchedulerEvaluate:
     def scheduler(self, mock_query, mock_notifier):
         return Scheduler(leader=None, notifier=mock_notifier, query=mock_query)
 
-    @pytest.mark.asyncio
     async def test_enqueues_jobs_for_matching_expressions(self, scheduler, mock_query):
         @worker(queue="minute", cron="* * * * *")
         class EveryMinuteWorker:
@@ -257,7 +256,6 @@ class TestSchedulerEvaluate:
         assert job.queue == "minute"
         assert job.worker.endswith("EveryMinuteWorker")
 
-    @pytest.mark.asyncio
     async def test_does_not_enqueue_non_matching_expressions(
         self, scheduler, mock_query
     ):
@@ -271,7 +269,6 @@ class TestSchedulerEvaluate:
         # We shouldn't be running tests at midnight on New Years Eve...
         assert len(mock_query.enqueued_jobs) == 0
 
-    @pytest.mark.asyncio
     async def test_enqueues_multiple_matching_jobs(self, scheduler, mock_query):
         @worker(queue="first", cron="* * * * *")
         class FirstWorker:
@@ -286,7 +283,6 @@ class TestSchedulerEvaluate:
 
         assert len(mock_query.enqueued_jobs) == 2
 
-    @pytest.mark.asyncio
     async def test_injects_cron_metadata(self, scheduler, mock_query):
         @worker(queue="meta", cron="* * * * *")
         class MetaWorker:
@@ -301,7 +297,6 @@ class TestSchedulerEvaluate:
         assert job.meta["cron_expr"] == "* * * * *"
         assert "cron_name" in job.meta
 
-    @pytest.mark.asyncio
     async def test_uses_configured_timezone(self, mock_query, mock_notifier):
         chi_tz = ZoneInfo("America/Chicago")
         chi_now = datetime.now(chi_tz)
@@ -329,7 +324,6 @@ class TestSchedulerEvaluate:
         assert len(mock_query.enqueued_jobs) == 1
         assert mock_query.enqueued_jobs[0].queue == "chi"
 
-    @pytest.mark.asyncio
     async def test_per_job_timezone_override(self, mock_query, mock_notifier):
         chi_tz = ZoneInfo("America/Chicago")
         los_tz = ZoneInfo("America/Los_Angeles")

@@ -19,7 +19,6 @@ class FailureWorker:
 
 
 class TestExecutorTelemetry:
-    @pytest.mark.asyncio
     async def test_emits_start_and_stop_events_for_successful_execution(self):
         calls = []
 
@@ -49,7 +48,6 @@ class TestExecutorTelemetry:
         assert stop_meta["duration"] > 0
         assert stop_meta["queue_time"] > 0
 
-    @pytest.mark.asyncio
     async def test_emits_exception_events_for_failed_execution(self):
         calls = []
 
@@ -72,7 +70,6 @@ class TestExecutorTelemetry:
         assert "traceback" in exception_meta
         assert "duration" in exception_meta
 
-    @pytest.mark.asyncio
     async def test_returns_executor_with_error_details_for_failure(self):
         job = FailureWorker.new()
 
@@ -83,7 +80,6 @@ class TestExecutorTelemetry:
         assert isinstance(executor.result, ValueError)
         assert str(executor.result) == "Worker failed"
 
-    @pytest.mark.asyncio
     async def test_unsafe_mode_still_emits_telemetry_before_reraise(self):
         calls = []
 
@@ -98,6 +94,7 @@ class TestExecutorTelemetry:
             await Executor(job, safe=False).execute()
 
         assert "oban.job.exception" in calls
+
 
 class TestExecutorCurrentJob:
     async def test_getting_current_job_from_context(self):
