@@ -526,9 +526,11 @@ class TestRetryJob:
 
             await with_backoff(lambda: assert_state(oban, job.id, "discarded"))
 
+            await oban.pause_queue("default")
+
             await oban.retry_job(job.id)
 
-            await with_backoff(lambda: assert_state(oban, job.id, "available"))
+            await assert_state(oban, job.id, "available")
 
     async def test_retrying_a_nonexistent_job(self, oban_instance):
         async with oban_instance() as oban:
@@ -547,11 +549,13 @@ class TestRetryAllJobs:
             await with_backoff(lambda: assert_state(oban, job_2.id, "cancelled"))
             await with_backoff(lambda: assert_state(oban, job_3.id, "completed"))
 
+            await oban.pause_queue("default")
+
             assert await oban.retry_many_jobs([job_1.id, job_2, job_3]) == 3
 
-            await with_backoff(lambda: assert_state(oban, job_1.id, "available"))
-            await with_backoff(lambda: assert_state(oban, job_2.id, "available"))
-            await with_backoff(lambda: assert_state(oban, job_3.id, "available"))
+            await assert_state(oban, job_1.id, "available")
+            await assert_state(oban, job_2.id, "available")
+            await assert_state(oban, job_3.id, "available")
 
 
 class TestDeleteJob:
