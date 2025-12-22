@@ -155,6 +155,18 @@ async def schema_pool(dsn: str) -> AsyncIterator[AsyncConnectionPool]:
         await pool.close()
 
 
+async def _start_pool(conf: Config) -> AsyncConnectionPool:
+    try:
+        pool = await conf.create_pool()
+        logger.info(
+            f"Connected to database (pool: {conf.pool_min_size}-{conf.pool_max_size})"
+        )
+        return pool
+    except Exception as error:
+        logger.error(f"Failed to connect to database: {error!r}")
+        sys.exit(1)
+
+
 def handle_signals() -> asyncio.Event:
     shutdown_event = asyncio.Event()
     sigint_count = 0
@@ -192,6 +204,11 @@ def handle_signals() -> asyncio.Event:
 def main() -> None:
     """Oban - Job orchestration framework for Python, backed by PostgreSQL."""
     pass
+
+
+@main.command()
+def version() -> None:
+    click.echo(f"oban {__version__}")
 
 
 @main.command()
@@ -376,16 +393,7 @@ def start(
             logger.info("Dry run complete-configuration is valid!")
             sys.exit(0)
 
-        try:
-            pool = await conf.create_pool()
-            logger.info(
-                f"Connected to {conf.dsn} "
-                f"(pool min: {conf.pool_min_size}, max: {conf.pool_max_size})"
-            )
-        except Exception as error:
-            logger.error(f"Failed to connect to database: {error!r}")
-            sys.exit(1)
-
+        pool = await _start_pool(conf)
         oban = await conf.create_oban(pool)
 
         telemetry_logger.attach()
