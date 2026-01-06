@@ -225,12 +225,13 @@ class Query:
 
                 return result.rowcount
 
-    async def rescue_jobs(self) -> int:
+    async def rescue_jobs(self, rescue_after: float) -> int:
         async with self._pool.connection() as conn:
             async with conn.transaction():
                 stmt = self._load_file("rescue_jobs.sql", self._prefix)
+                args = {"rescue_after": rescue_after}
 
-                result = await conn.execute(stmt)
+                result = await conn.execute(stmt, args)
 
                 return result.rowcount
 

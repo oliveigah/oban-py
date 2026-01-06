@@ -40,17 +40,30 @@ call these jobs "orphans", but orphaning isn't a bad thing. It means that the jo
 it may be retried again when the system comes back online.
 
 The "lifeline" process automatically rescues orphaned jobs by periodically checking for jobs stuck
-in the `executing` state and moving them back to `available` so they can run again.
+in the `executing` state for too long and moving them back to `available` so they can run again.
 
-**Lifeline is enabled by default** and runs every 60 seconds.
+**Lifeline is enabled by default** and runs every 60 seconds, rescuing jobs that have been
+executing for more than 5 minutes.
+
+### How Rescue Works
+
+Oban uses a **timeout-based rescue** strategy: jobs are rescued if their `attempted_at` timestamp
+is older than the configured `rescue_after` threshold (default: 300 seconds). This approach works
+reliably across node and doesn't require coordination between nodes.
+
+For more accurate rescue that detects crashed producers immediately, and won't rescue jobs that
+are still legitimately running, see [Oban Pro's Accurate Rescue][adoption].
+
+[adoption]: https://oban.pro/docs/py_pro/adoption.html
 
 ### Configuring Lifeline
 
-You can customize the check interval in `oban.toml`:
+You can customize lifeline behavior in `oban.toml`:
 
 ```toml
 [lifeline]
-interval = 30  # Check for orphaned jobs every 30 seconds
+interval = 30       # Check for orphaned jobs every 30 seconds
+rescue_after = 600  # Rescue jobs executing for more than 10 minutes
 ```
 
 Or programmatically when running embedded:
@@ -59,9 +72,15 @@ Or programmatically when running embedded:
 oban = Oban(
     pool=pool,
     queues={"default": 10},
-    lifeline={"interval": 30}
+    lifeline={"interval": 30, "rescue_after": 600}
 )
 ```
+
+### Choosing rescue_after
+
+The `rescue_after` value should be longer than your longest-running job. If you have jobs that
+legitimately run for 10 minutes, set `rescue_after` to at least 15 minutes (900 seconds) to avoid
+premature rescue.
 
 ## Maintenance Guidelines
 

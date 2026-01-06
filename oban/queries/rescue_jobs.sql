@@ -15,4 +15,4 @@ SET
   END
 WHERE
   state = 'executing'
-  AND attempted_by[2] NOT IN (SELECT uuid::text FROM oban_producers)
+  AND attempted_at < timezone('UTC', now()) - make_interval(secs => %(rescue_after)s)
