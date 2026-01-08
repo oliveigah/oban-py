@@ -4,6 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from . import telemetry
+from ._extensions import use_ext
 
 if TYPE_CHECKING:
     from ._leader import Leader
@@ -95,6 +96,8 @@ class Stager:
             self._producers[queue].notify()
 
     async def _stage(self) -> None:
+        await use_ext("stager.before_stage", lambda _query: None, self._query)
+
         with telemetry.span("oban.stager.stage", {}) as context:
             queues = list(self._producers.keys())
 
