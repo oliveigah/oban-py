@@ -28,6 +28,7 @@ class Config:
 
     # Core loop configurations
     lifeline: dict[str, Any] | None = None
+    metrics: dict[str, Any] | bool | None = None
     pruner: dict[str, Any] | None = None
     refresher: dict[str, Any] | None = None
     scheduler: dict[str, Any] | None = None
@@ -159,6 +160,7 @@ class Config:
             for key in [
                 "leadership",
                 "lifeline",
+                "metrics",
                 "node",
                 "pruner",
                 "refresher",

@@ -16,6 +16,7 @@ from psycopg_pool import AsyncConnectionPool
 from .job import Job
 from ._leader import Leader
 from ._lifeline import Lifeline
+from ._metrics import Metrics
 from ._notifier import Notifier, PostgresNotifier
 from ._producer import Producer, QueueInfo
 from ._pruner import Pruner
@@ -37,6 +38,7 @@ class Oban:
         dispatcher: Any = None,
         leadership: bool | None = None,
         lifeline: dict[str, Any] = {},
+        metrics: dict[str, Any] | bool | None = None,
         name: str | None = None,
         node: str | None = None,
         notifier: Notifier | None = None,
@@ -60,6 +62,8 @@ class Oban:
             pool: Database connection pool (e.g., AsyncConnectionPool)
             leadership: Enable leadership election (default: True if queues configured, False otherwise)
             lifeline: Lifeline config options: interval (default: 60.0)
+            metrics: Metrics broadcasting for Oban Web integration. Disabled by default.
+                     Pass True to enable with defaults, or a dict with interval (default: 1.0).
             name: Name for this instance in the registry (default: "oban")
             node: Node identifier for this instance (default: socket.gethostname())
             notifier: Notifier instance for pub/sub (default: PostgresNotifier with default config)
@@ -131,6 +135,17 @@ class Oban:
             query=self._query,
             **scheduler,
         )
+
+        self._metrics = None
+        if metrics is not None:
+            metrics_config = {} if metrics is True else metrics
+            self._metrics = Metrics(
+                name=self._name,
+                node=self._node,
+                notifier=self._notifier,
+                producers=self._producers,
+                **metrics_config,
+            )
 
         self._signal_token = None
 
@@ -287,6 +302,9 @@ class Oban:
             self._scheduler.start(),
         ]
 
+        if self._metrics:
+            tasks.append(self._metrics.start())
+
         for producer in self._producers.values():
             tasks.append(producer.start())
 
@@ -335,6 +353,9 @@ class Oban:
             self._scheduler.stop(),
             self._notifier.stop(),
         ]
+
+        if self._metrics:
+            tasks.append(self._metrics.stop())
 
         for producer in self._producers.values():
             tasks.append(producer.stop())
