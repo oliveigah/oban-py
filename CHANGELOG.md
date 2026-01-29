@@ -4,6 +4,44 @@ Oban is a robust job orchestration framework for Python, backed by PostgreSQL. T
 initial public release, bringing battle-tested patterns from Oban for Elixir to the Python
 ecosystem with an async-native, Pythonic API.
 
+## v0.5.1 — 2025-01-29
+
+### Enhancements
+
+- [Oban] Change get_instance to a classmethod on Oban
+
+  Access the current Oban instance via `Oban.get_instance()` instead of importing a standalone
+  function.
+
+### Bug Fixes
+
+- [Install] Scope enum detection to the provided schema
+
+  The `oban_job_state` string was auto-prefixed with the current schema, while the `pg_namespace`
+  table is flat and the value would never match the `typename`. Now the enum is correctly detected
+  and skipped for true idempotency.
+
+- [Producer] Always ack completed jobs regardless of queue status
+
+  Paused or shutting down queues didn't ack jobs. Now, acking happens in the producer loop
+  regardless of the queue state.
+
+- [Decorator] Correctly handle async decorated jobs
+
+  The result of async functions decorated with `@job` wasn't awaited and returned.
+
+- [Cron] Correctly parse `@weekly` CRON alias
+
+  The `@weekly` alias generated a range from 1-7 rather than the standard 0-6, which prevented it
+  from triggering accurately. Now both 0 and 7 are normalized and either may refer to Sunday.
+
+### Chores
+
+- [Job] Switch Job from dataclass to regular class
+
+  It's already mutable. This improves overall performance because we copy less, while retaining
+  the benefits of `__slots__` for predefined field names.
+
 ## v0.5.0 — 2025-01-19
 
 ### Features
