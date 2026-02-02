@@ -6,8 +6,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import cache
 from importlib.resources import files
-from typing import Any
+from typing import Any, Union
 
+from psycopg import AsyncConnection, AsyncCursor
 from psycopg.rows import class_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
@@ -15,6 +16,9 @@ from psycopg_pool import AsyncConnectionPool
 from ._executor import AckAction
 from ._extensions import use_ext
 from .job import Job, TIMESTAMP_FIELDS
+
+# Type alias for connection-like objects that can be passed to enqueue
+ConnectionLike = Union[AsyncConnection, AsyncCursor, Any]
 
 ACKABLE_FIELDS = [
     "id",
@@ -41,6 +45,34 @@ INSERTABLE_FIELDS = [
 
 # The `Job` class has errors, but we only insert a single `error` at one time.
 JSON_FIELDS = ["args", "error", "errors", "meta", "tags"]
+
+
+async def _unwrap_connection(conn: ConnectionLike) -> AsyncConnection | AsyncCursor:
+    # psycopg connection or cursor
+    if isinstance(conn, (AsyncConnection, AsyncCursor)):
+        return conn
+
+    # SQLAlchemy AsyncSession
+    if hasattr(conn, "connection") and not hasattr(conn, "get_raw_connection"):
+        conn = await conn.connection()
+
+    # SQLAlchemy AsyncConnection
+    if hasattr(conn, "get_raw_connection"):
+        raw = conn.get_raw_connection()
+
+        if driver := getattr(raw, "dbapi_connection", None):
+            return driver
+        if driver := getattr(raw, "driver_connection", None):
+            return driver
+        return raw
+
+    if hasattr(conn, "execute"):
+        return conn
+
+    raise TypeError(
+        f"Expected psycopg AsyncConnection, SQLAlchemy AsyncSession, "
+        f"or compatible object with execute(), got {type(conn).__name__}"
+    )
 
 
 UPDATABLE_FIELDS = [
@@ -76,8 +108,10 @@ async def _ack_jobs(query: Query, acks: list[AckAction]) -> list[int]:
             return acked_ids
 
 
-async def _insert_jobs(query: Query, jobs: list[Job]) -> list[Job]:
-    async with query._pool.connection() as conn:
+async def _insert_jobs(
+    query: Query, jobs: list[Job], conn: ConnectionLike = None
+) -> list[Job]:
+    async def inner_insert(conn):
         stmt = Query._load_file("insert_job.sql", query._prefix)
         inserted = []
 
@@ -99,6 +133,12 @@ async def _insert_jobs(query: Query, jobs: list[Job]) -> list[Job]:
             inserted.append(job)
 
         return inserted
+
+    if conn is not None:
+        return await inner_insert(await _unwrap_connection(conn))
+
+    async with query._pool.connection() as pool_conn:
+        return await inner_insert(pool_conn)
 
 
 class Query:
@@ -208,8 +248,10 @@ class Query:
 
                     return await cur.fetchall()
 
-    async def insert_jobs(self, jobs: list[Job]) -> list[Job]:
-        return await use_ext("query.insert_jobs", _insert_jobs, self, jobs)
+    async def insert_jobs(
+        self, jobs: list[Job], conn: ConnectionLike = None
+    ) -> list[Job]:
+        return await use_ext("query.insert_jobs", _insert_jobs, self, jobs, conn)
 
     async def prune_jobs(self, max_age: int, limit: int) -> int:
         async with self._pool.connection() as conn:

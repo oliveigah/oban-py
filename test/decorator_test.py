@@ -129,3 +129,32 @@ class TestJobDecorator:
         assert not asyncio.iscoroutine(result)
         assert executed
         assert result == "ok"
+
+
+class TestWorkerEnqueueWithConn:
+    async def test_worker_enqueue_with_conn(self, oban_instance):
+        @worker()
+        class TransactionalWorker:
+            async def process(self, job):
+                return job.args
+
+        async with oban_instance() as oban:
+            async with oban._connection() as conn:
+                async with conn.transaction():
+                    job = await TransactionalWorker.enqueue({"ref": 1}, conn=conn)
+
+            assert (await oban.get_job(job.id)) is not None
+
+
+class TestJobEnqueueWithConn:
+    async def test_job_enqueue_with_conn(self, oban_instance):
+        @job()
+        def transactional_task(ref: int):
+            return ref
+
+        async with oban_instance() as oban:
+            async with oban._connection() as conn:
+                async with conn.transaction():
+                    inserted = await transactional_task.enqueue(1, conn=conn)
+
+            assert (await oban.get_job(inserted.id)) is not None

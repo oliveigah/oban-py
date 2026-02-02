@@ -66,7 +66,12 @@ def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
         >>> job = EmailWorker.enqueue(..., schedule_in=timedelta(minutes=5))
         >>>
         >>> # Schedule a job to run in 60 seconds
-        >>> job = EmailWorker.enqueue(...,schedule_in=60)
+        >>> job = EmailWorker.enqueue(..., schedule_in=60)
+        >>>
+        >>> # Transactional insertion with SQLAlchemy
+        >>> async with session.begin():
+        ...     session.add(user)
+        ...     await EmailWorker.enqueue({"user_id": user.id}, conn=session)
         >>>
         >>> # Periodic worker that runs daily at midnight
         >>> @worker(queue="cleanup", cron="@daily")
@@ -125,13 +130,13 @@ def worker(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
 
         @classmethod
         async def enqueue(
-            cls, args: dict[str, Any] | None = None, /, **overrides
+            cls, args: dict[str, Any] | None = None, /, conn=None, **overrides
         ) -> Job:
             from .oban import Oban
 
             job = cls.new(args, **overrides)
 
-            return await Oban.get_instance(cls._oban_name).enqueue(job)
+            return await Oban.get_instance(cls._oban_name).enqueue(job, conn=conn)
 
         setattr(cls, "_opts", overrides)
         setattr(cls, "_oban_name", oban)
@@ -179,6 +184,11 @@ def job(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
         ... def generate_weekly_report():
         ...     print("Generating weekly report")
         ...     return {"status": "complete"}
+        >>>
+        >>> # Transactional insertion with SQLAlchemy
+        >>> async with session.begin():
+        ...     session.add(user)
+        ...     await send_email.enqueue("user@example.com", "Welcome", "Hello!", conn=session)
     """
 
     def decorate(func: Callable[..., Any]) -> type:
@@ -208,10 +218,10 @@ def job(*, oban: str = "oban", cron: str | dict | None = None, **overrides):
             return original_new(dict(bound.arguments))
 
         @wraps(func)
-        async def enq_with_sig(*args, **kwargs):
+        async def enq_with_sig(*args, conn=None, **kwargs):
             bound = sig.bind(*args, **kwargs)
             bound.apply_defaults()
-            return await original_enq(dict(bound.arguments))
+            return await original_enq(dict(bound.arguments), conn=conn)
 
         worker_cls.new = staticmethod(new_with_sig)
         worker_cls.enqueue = staticmethod(enq_with_sig)

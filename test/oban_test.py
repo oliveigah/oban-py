@@ -51,6 +51,32 @@ class TestEnqueue:
             assert job.worker == "test.oban_test.Worker"
             assert job.state == "available"
 
+    async def test_enqueue_with_conn_commits_with_transaction(self, oban_instance):
+        async with oban_instance() as oban:
+            async with oban._connection() as conn:
+                async with conn.transaction():
+                    job = await oban.enqueue(Worker.new({"ref": 1}), conn=conn)
+
+                    assert job.id is not None
+
+            assert (await oban.get_job(job.id)) is not None
+
+    async def test_enqueue_with_conn_rolls_back_with_transaction(self, oban_instance):
+        async with oban_instance() as oban:
+            job_id = None
+
+            try:
+                async with oban._connection() as conn:
+                    async with conn.transaction():
+                        job = await oban.enqueue(Worker.new({"ref": 1}), conn=conn)
+                        job_id = job.id
+
+                        raise RuntimeError("Force rollback")
+            except RuntimeError:
+                pass
+
+            assert (await oban.get_job(job_id)) is None
+
 
 class TestEnqueueMany:
     async def test_multiple_jobs_are_inserted_into_database(self, oban_instance):
@@ -68,6 +94,19 @@ class TestEnqueueMany:
                 assert job.inserted_at is not None
                 assert job.scheduled_at is not None
                 assert job.state == "available"
+
+    async def test_enqueue_many_with_conn_commits_with_transaction(self, oban_instance):
+        async with oban_instance() as oban:
+            async with oban._connection() as conn:
+                async with conn.transaction():
+                    jobs = await oban.enqueue_many(
+                        Worker.new({"ref": 1}),
+                        Worker.new({"ref": 2}),
+                        conn=conn,
+                    )
+
+            for job in jobs:
+                assert (await oban.get_job(job.id)) is not None
 
 
 class TestIntegration:

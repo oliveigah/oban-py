@@ -19,7 +19,7 @@ from ._lifeline import Lifeline
 from ._notifier import Notifier, PostgresNotifier
 from ._producer import Producer, QueueInfo
 from ._pruner import Pruner
-from ._query import Query
+from ._query import ConnectionLike, Query
 from ._refresher import Refresher
 from ._scheduler import Scheduler
 from ._stager import Stager
@@ -353,11 +353,14 @@ class Oban:
                     f"The '{table}' is missing, run schema installation first."
                 )
 
-    async def enqueue(self, job: Job) -> Job:
+    async def enqueue(self, job: Job, *, conn: ConnectionLike = None) -> Job:
         """Enqueue a job in the database for processing.
 
         Args:
             job: A Job instance created via Worker.new()
+            conn: Optional database connection for transactional insertion. Accepts
+                psycopg AsyncConnection, SQLAlchemy AsyncConnection, or any object
+                with a compatible execute() method.
 
         Returns:
             The inserted job with database-assigned values (id, timestamps, state)
@@ -369,13 +372,23 @@ class Oban:
             For convenience, you can also use Worker.enqueue() directly:
 
             >>> await EmailWorker.enqueue({"to": "user@example.com", "subject": "Welcome"})
+
+            For transactional insertion with SQLAlchemy:
+
+            >>> async with session.begin():
+            ...     session.add(user)
+            ...     await oban.enqueue(WelcomeEmail.new({"user_id": user.id}), conn=session)
         """
-        result = await self.enqueue_many(job)
+        result = await self.enqueue_many(job, conn=conn)
 
         return result[0]
 
     async def enqueue_many(
-        self, jobs_or_first: Iterable[Job] | Job, /, *rest: Job
+        self,
+        jobs_or_first: Iterable[Job] | Job,
+        /,
+        *rest: Job,
+        conn: ConnectionLike = None,
     ) -> list[Job]:
         """Insert multiple jobs into the database in a single operation.
 
@@ -386,6 +399,9 @@ class Oban:
             jobs_or_first: Either an iterable of jobs, or the first job when using
                 variadic arguments
             *rest: Additional jobs when using variadic arguments
+            conn: Optional database connection for transactional insertion. Accepts
+                psycopg AsyncConnection, SQLAlchemy AsyncConnection, or any object
+                with a compatible execute() method.
 
         Returns:
             The inserted jobs with database-assigned values (id, timestamps, state)
@@ -398,6 +414,18 @@ class Oban:
             >>> # Or with an iterable:
             >>> await oban.enqueue_many([job1, job2, job3])
             >>> await oban.enqueue_many(Worker.new({"id": id}) for id in range(10))
+
+            For transactional insertion with SQLAlchemy:
+
+            >>> async with session.begin():
+            ...     order = Order(user_id=user.id, total=100)
+            ...     session.add(order)
+            ...     await session.flush()
+            ...     await oban.enqueue_many(
+            ...         SendReceiptWorker.new({"order_id": order.id}),
+            ...         UpdateInventoryWorker.new({"order_id": order.id}),
+            ...         conn=session,
+            ...     )
         """
         from .testing import _get_mode
 
@@ -411,7 +439,7 @@ class Oban:
 
             return jobs
 
-        result = await self._query.insert_jobs(jobs)
+        result = await self._query.insert_jobs(jobs, conn=conn)
 
         queues = {job.queue for job in result if job.state == "available"}
 

@@ -24,7 +24,7 @@ production
 defining_queues
 managing_queues
 writing_jobs
-scheduling_jobs
+enqueueing_jobs
 periodic_jobs
 managing_jobs
 job_maintenance
