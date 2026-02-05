@@ -4,6 +4,35 @@ Oban is a robust job orchestration framework for Python, backed by PostgreSQL. T
 initial public release, bringing battle-tested patterns from Oban for Elixir to the Python
 ecosystem with an async-native, Pythonic API.
 
+## v0.5.2 — 2025-02-05
+
+### Enhancements
+
+- [Oban] Add transactional insertion with conn parameter
+
+  Jobs can now be inserted atomically with other database changes by passing a connection to
+  enqueue:
+
+      async with session.begin():
+          session.add(user)
+          await WelcomeEmailWorker.enqueue({"user_id": user.id}, conn=session)
+
+  The conn parameter is supported by `enqueue()`, `enqueue_many()` methods on `oban`, decorated
+  modules, and decorated functions. The conn may be a SQLAlchemy AsyncSession, AsyncConnection, or
+  psycopg AsyncConnection directly.
+
+- [Oban] Move insert notifications into sql for transactional safety
+
+  The notify call is now part of the insertion sql, ensuring notifications are only sent when the
+  transaction commits. If the transaction rolls back, no notification is sent.
+
+### Bug Fixes
+
+- [Producer] Attempt to ack jobs after cancelling the async loop in producer
+
+  Now acking happens after the loop is cancelled and all running tasks have completed. This
+  eliminates a race condition that could cause a deadlock during shutdown.
+
 ## v0.5.1 — 2025-01-29
 
 ### Enhancements
