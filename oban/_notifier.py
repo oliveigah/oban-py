@@ -29,7 +29,7 @@ def encode_payload(payload: dict) -> str:
     Returns:
         Base64-encoded gzipped JSON string
     """
-    dumped = orjson.dumps(payload)
+    dumped = orjson.dumps(payload, option=orjson.OPT_NON_STR_KEYS)
     zipped = gzip.compress(dumped)
 
     return base64.b64encode(zipped).decode("ascii")
