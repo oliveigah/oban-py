@@ -137,7 +137,7 @@ class Oban:
         )
 
         self._metrics = None
-        if metrics is not None:
+        if metrics:
             metrics_config = {} if metrics is True else metrics
             self._metrics = Metrics(
                 leader=self._leader,

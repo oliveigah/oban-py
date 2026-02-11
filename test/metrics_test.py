@@ -4,7 +4,6 @@ import pytest
 
 from oban import worker
 from oban._metrics import Metrics, _build_gauge, _build_sketch, _compute_bin
-from oban._scheduler import _scheduled_entries, register_scheduled
 
 
 @worker()
@@ -349,7 +348,9 @@ class TestCronitorBroadcast:
             assert daily[0] == "0 0 * * *"
             assert daily[2] == {}
 
-            frequent = entries_by_worker.get("test.metrics_test.FrequentScheduledWorker")
+            frequent = entries_by_worker.get(
+                "test.metrics_test.FrequentScheduledWorker"
+            )
             assert frequent is not None
             assert frequent[0] == "*/5 * * * *"
             assert frequent[2] == {"timezone": "America/Chicago"}
