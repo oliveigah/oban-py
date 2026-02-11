@@ -203,10 +203,16 @@ class Query:
                 await cur.execute(stmt, {"states": states})
                 return await cur.fetchall()
 
-    async def count_jobs(self) -> list[tuple[str, str, int]]:
+    async def count_jobs(self, states: list[str]) -> list[tuple[str, str, int]]:
         async with self._pool.connection() as conn:
             stmt = self._load_file("count_jobs.sql", self._prefix)
-            result = await conn.execute(stmt)
+            result = await conn.execute(stmt, {"states": states})
+            return await result.fetchall()
+
+    async def estimate_counts(self, states: list[str]) -> list[tuple[str, str, int]]:
+        async with self._pool.connection() as conn:
+            stmt = self._load_file("estimate_counts.sql", self._prefix)
+            result = await conn.execute(stmt, {"states": Jsonb(states)})
             return await result.fetchall()
 
     async def cancel_many_jobs(self, ids: list[int]) -> tuple[int, list[int]]:

@@ -24,6 +24,10 @@ def build_metrics(interval=1.0):
     )
 
 
+def get_full_counts(payload):
+    return [met for met in payload["metrics"] if met["series"] == "full_count"]
+
+
 class TestMetricsValidation:
     def test_valid_config_passes(self):
         build_metrics(interval=1.0)
@@ -199,7 +203,7 @@ class TestJobMetricsBroadcast:
             assert "size" in exec_time["value"]
             assert exec_time["value"]["size"] == 1
 
-    @pytest.mark.oban(queues={"default": 1}, metrics={"interval": 60}, leadership=False)
+    @pytest.mark.oban(metrics={"interval": 60}, leadership=False)
     async def test_no_metrics_broadcast_when_buffer_empty(self, oban_instance):
         received = asyncio.Queue()
 
@@ -217,7 +221,7 @@ class TestJobMetricsBroadcast:
 
 
 class TestFullCountMetrics:
-    @pytest.mark.oban(queues={"default": 1}, metrics=True, leadership=True)
+    @pytest.mark.oban(metrics=True, leadership=True)
     async def test_broadcasts_full_counts_when_leader(self, oban_instance):
         received = asyncio.Queue()
 
@@ -227,18 +231,14 @@ class TestFullCountMetrics:
         async with oban_instance() as oban:
             await oban._notifier.listen("metrics", callback)
 
-            # Insert a job to have something to count
             await oban.enqueue(MetricsTestWorker.new({}))
             await asyncio.sleep(0.02)
 
-            # Broadcast metrics including full_counts
             await oban._metrics.broadcast()
 
             payload = await asyncio.wait_for(received.get(), timeout=0.5)
-            metrics = payload["metrics"]
 
-            # Find full_count metrics
-            full_counts = [met for met in metrics if met["series"] == "full_count"]
+            full_counts = get_full_counts(payload)
             assert len(full_counts) > 0
 
             for metric in full_counts:
@@ -257,15 +257,52 @@ class TestFullCountMetrics:
         async with oban_instance() as oban:
             await oban._notifier.listen("metrics", callback)
 
-            # Insert a job
             await oban.enqueue(MetricsTestWorker.new({}))
             await asyncio.sleep(0.02)
 
-            # Broadcast should only have job metrics, no full_counts
             await oban._metrics.broadcast()
 
             payload = await asyncio.wait_for(received.get(), timeout=0.5)
-            metrics = payload["metrics"]
 
-            full_counts = [met for met in metrics if met["series"] == "full_count"]
+            full_counts = get_full_counts(payload)
             assert len(full_counts) == 0
+
+
+class TestEstimatedCounts:
+    @pytest.mark.oban(metrics=True, leadership=True)
+    async def test_estimate_counts_query(self, oban_instance):
+        async with oban_instance() as oban:
+            counts = await oban._query.estimate_counts(["available", "completed"])
+            assert isinstance(counts, list)
+            for state, queue, count in counts:
+                assert state in ["available", "completed"]
+                assert queue == "default"
+                assert isinstance(count, int)
+
+    @pytest.mark.oban(
+        queues={"default": 1}, metrics={"estimate_limit": 1}, leadership=True
+    )
+    async def test_switches_to_estimates_when_over_limit(self, oban_instance):
+        received = asyncio.Queue()
+
+        def callback(_channel, payload):
+            received.put_nowait(payload)
+
+        async with oban_instance() as oban:
+            await oban._notifier.listen("metrics", callback)
+
+            # Insert jobs to exceed the limit (estimate_limit=1)
+            await oban.enqueue(MetricsTestWorker.new({}))
+            await oban.enqueue(MetricsTestWorker.new({}))
+            await asyncio.sleep(0.02)
+
+            # First broadcast uses exact counts (previous_counts is empty)
+            await oban._metrics.broadcast()
+            await asyncio.wait_for(received.get(), timeout=0.5)
+
+            # Second broadcast should use estimates for states over limit
+            await oban._metrics.broadcast()
+            payload = await asyncio.wait_for(received.get(), timeout=0.5)
+
+            full_counts = get_full_counts(payload)
+            assert len(full_counts) > 0

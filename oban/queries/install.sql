@@ -113,6 +113,25 @@ ALTER TABLE oban_jobs SET (
   fillfactor = 85
 );
 
+-- Functions
+
+CREATE OR REPLACE FUNCTION oban_count_estimate(state text, queue text)
+RETURNS integer AS $func$
+DECLARE
+  plan jsonb;
+BEGIN
+  EXECUTE 'EXPLAIN (FORMAT JSON)
+           SELECT id
+           FROM oban_jobs
+           WHERE state = $1::oban_job_state
+           AND queue = $2'
+    INTO plan
+    USING state, queue;
+  RETURN plan->0->'Plan'->'Plan Rows';
+END;
+$func$
+LANGUAGE plpgsql;
+
 -- Version
 
 COMMENT ON TABLE oban_jobs IS '1';
