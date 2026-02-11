@@ -115,6 +115,10 @@ without worrying about jobs being lost or orphaned due to crashes.
 - **Telemetry Integration** — Job life-cycle events are emitted via Telemetry integration.
   This enables simple logging, error reporting and health checkups without plug-ins.
 
+- **Web Dashboard** — Monitor queues, inspect jobs, and view execution metrics through
+  [Oban Web](https://hexdocs.pm/oban_web). Run the standalone dashboard via Docker for a
+  complete overview of your job processing system.
+
 ## 🌟 Oban Pro
 
 Oban Pro is a licensed add-on that expands what Oban is capable of while making complex workflows

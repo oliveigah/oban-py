@@ -71,6 +71,16 @@ oban = Oban(
 
 See the [Job Maintenance](job_maintenance.md) guide for more details on job retention.
 
+### Enable Metrics for Web Dashboard
+
+To use the Oban Web dashboard, enable metrics broadcasting:
+
+```python
+oban = Oban(pool=pool, queues={"default": 10}, metrics=True)
+```
+
+See the [Web Dashboard](web_dashboard.md) guide for setup instructions.
+
 ## Ship It!
 
 Whether you're using the CLI or embedded mode, you now have:
