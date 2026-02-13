@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import importlib
 import logging
 import os
 import signal
 import socket
-import subprocess
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,6 +21,8 @@ from oban import __version__
 from oban._config import Config
 from oban.schema import (
     install as install_schema,
+)
+from oban.schema import (
     uninstall as uninstall_schema,
 )
 from oban.telemetry import logger as telemetry_logger
@@ -72,30 +74,51 @@ def _import_cron_modules(module_paths: list[str]) -> int:
     return sum([safe_import(path) for path in module_paths])
 
 
+def _has_cron_decorator(source: str) -> bool:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+
+            func = decorator.func
+            name = (
+                func.attr
+                if isinstance(func, ast.Attribute)
+                else getattr(func, "id", None)
+            )
+
+            if name in ("worker", "job"):
+                if any(kw.arg == "cron" for kw in decorator.keywords):
+                    return True
+
+    return False
+
+
 def _import_cron_paths(paths: list[str]) -> list[str]:
     root = Path(os.getcwd())
-    grep = ["grep", "-rl", "--include=*.py", r"@worker.*cron\|@job.*cron"]
 
     found = []
-    for pattern in [str(root / path) for path in paths]:
-        result = subprocess.run(
-            [*grep, pattern],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+    for path in paths:
+        target = root / path
 
-        if result.returncode == 0:
-            files = [
-                line.strip()
-                for line in result.stdout.strip().split("\n")
-                if line.strip()
-            ]
-            found.extend(files)
+        if target.is_file():
+            py_files = [target]
+        else:
+            py_files = target.rglob("*.py")
 
-    files = set(str(Path(file).resolve()) for file in found)
+        for py_file in py_files:
+            if _has_cron_decorator(py_file.read_text()):
+                found.append(str(py_file.resolve()))
 
-    return [mod for file in files if (mod := _file_to_module(file))]
+    return [mod for file in set(found) if (mod := _file_to_module(file))]
 
 
 def _split_csv(value: str | None) -> list[str] | None:
@@ -126,7 +149,7 @@ def _find_and_load_cron_modules(
 
 def print_banner(version: str) -> None:
     banner = f"""
-  
+
   [38;2;153;183;183m ██████╗  ██████╗    ████╗   ███╗   ██╗
   [38;2;143;175;175m██╔═══██╗ ██╔══██╗  ██╔═██╗  ████╗  ██║
   [38;2;133;167;167m██║   ██║ ██████╔╝ ████████╗ ██╔██╗ ██║
