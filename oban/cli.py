@@ -21,8 +21,6 @@ from oban import __version__
 from oban._config import Config
 from oban.schema import (
     install as install_schema,
-)
-from oban.schema import (
     uninstall as uninstall_schema,
 )
 from oban.telemetry import logger as telemetry_logger
