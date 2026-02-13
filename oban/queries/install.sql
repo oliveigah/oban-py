@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS oban_jobs (
     priority smallint NOT NULL DEFAULT 0,
     args jsonb NOT NULL DEFAULT '{}',
     meta jsonb NOT NULL DEFAULT '{}',
-    tags jsonb NOT NULL DEFAULT '[]',
+    tags text[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     errors jsonb NOT NULL DEFAULT '[]',
     attempted_by text[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     inserted_at timestamp WITHOUT TIME ZONE NOT NULL DEFAULT timezone('UTC', now()),

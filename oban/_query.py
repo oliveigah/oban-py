@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import cache
@@ -44,7 +43,7 @@ INSERTABLE_FIELDS = [
 ]
 
 # The `Job` class has errors, but we only insert a single `error` at one time.
-JSON_FIELDS = ["args", "error", "errors", "meta", "tags"]
+JSON_FIELDS = ["args", "error", "errors", "meta"]
 
 
 async def unwrap_connection(conn: ConnectionLike) -> AsyncConnection | AsyncCursor:
@@ -313,18 +312,16 @@ class Query:
         async with self._pool.connection() as conn:
             async with conn.transaction():
                 stmt = self._load_file("update_job.sql", self._prefix)
-                args = defaultdict(list)
 
                 for job in jobs:
-                    args["ids"].append(job.id)
+                    args = {"id": job.id}
 
                     for key in UPDATABLE_FIELDS:
-                        args[key].append(self._cast_type(key, getattr(job, key)))
+                        args[key] = self._cast_type(key, getattr(job, key))
 
-                result = await conn.execute(stmt, dict(args))
-                rows = await result.fetchall()
+                    result = await conn.execute(stmt, args)
+                    row = await result.fetchone()
 
-                for job, row in zip(jobs, rows):
                     job.args = row[0]
                     job.max_attempts = row[1]
                     job.meta = row[2]
